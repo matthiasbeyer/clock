@@ -1,4 +1,5 @@
 pub mod character;
+pub mod clear;
 pub mod line;
 pub mod text;
 pub mod xy;

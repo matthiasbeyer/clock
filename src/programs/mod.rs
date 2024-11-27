@@ -1,5 +1,6 @@
 pub mod led_n;
 pub mod running_light;
+pub mod duration;
 
 pub trait Program {
     const TICKER_DURATION: embassy_time::Duration;

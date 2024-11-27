@@ -14,12 +14,14 @@ use embassy_rp::pio_programs::ws2812::PioWs2812;
 use embassy_rp::pio_programs::ws2812::PioWs2812Program;
 use embassy_time::Ticker;
 use panic_probe as _;
+use programs::Program;
 use smart_leds::RGB8;
 
 mod blocks;
 mod data;
 mod programs;
 mod tab;
+mod utils;
 
 pub const NUM_LEDS: usize = 512;
 pub const NUM_LEDS_X: usize = 32;
@@ -49,12 +51,12 @@ async fn main(_spawner: Spawner) {
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
 
-    crate::blocks::text::Text::new("12:36", (1, 1), RGB8::new(10, 0, 0)).render_to_buffer(&mut buffer);
-    // crate::blocks::line::Line::new((1, 1), (8, 8), RGB_WHITE).render_to_buffer(&mut buffer);
+    let duration_time = crate::programs::duration::Duration::new(RGB8::new(10, 0, 0));
     let mut ticker = Ticker::every(embassy_time::Duration::from_secs(1));
     loop {
-        ticker.next().await;
+        duration_time.render(&mut buffer).await;
         render(&mut leds, &buffer).await;
+        ticker.next().await;
     }
 }
 
