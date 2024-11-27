@@ -19,12 +19,20 @@ const fn buffer_full_size<const X: usize, const Y: usize>() -> usize {
 impl<const X: usize, const Y: usize> Buffer<X, Y> {
     #[inline]
     pub fn get(&self, x: usize, y: usize) -> &RGB8 {
-        &self.buffer[y][X - x - 1]
+        &self.buffer[y][X - 1 - x]
     }
 
     #[inline]
     pub fn set(&mut self, x: usize, y: usize, rgb: RGB8) {
-        self.buffer[Y - y][X - x] = rgb;
+        defmt::debug!(
+            "Setting buffer ({}, {}) = ({}, {}, {})",
+            y,
+            x,
+            rgb.r,
+            rgb.g,
+            rgb.b
+        );
+        self.buffer[Y - 1 - y][X - 1 - x] = rgb;
     }
 
     pub fn render_to_continuous_buffer<const CONT_SIZE: usize>(&self, buf: &mut [RGB8; CONT_SIZE]) {
