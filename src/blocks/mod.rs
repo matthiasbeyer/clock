@@ -1,5 +1,6 @@
 pub mod character;
 pub mod line;
+pub mod text;
 pub mod xy;
 
 pub trait Block {
