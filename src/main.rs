@@ -14,6 +14,8 @@ use embassy_rp::pio_programs::ws2812::PioWs2812;
 use embassy_rp::pio_programs::ws2812::PioWs2812Program;
 use embassy_time::Ticker;
 use panic_probe as _;
+use program::LedN;
+use program::LedXY;
 use smart_leds::RGB8;
 
 use crate::program::Program;
@@ -49,8 +51,8 @@ async fn main(_spawner: Spawner) {
 
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
-    let mut light = RunningLight::default();
-    let mut ticker = Ticker::every(<RunningLight as Program>::TICKER_DURATION);
+    let mut light = LedXY::<4, 3>::default();
+    let mut ticker = Ticker::every(light.ticker_duration());
     loop {
         light.tick().await;
         light.render(&mut buffer).await;

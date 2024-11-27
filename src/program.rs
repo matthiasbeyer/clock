@@ -10,8 +10,13 @@ use crate::NUM_LEDS_Y;
 pub trait Program {
     const TICKER_DURATION: Duration;
 
+    #[inline]
+    fn ticker_duration(&self) -> Duration {
+        Self::TICKER_DURATION
+    }
+
     async fn tick(&mut self);
-    async fn render(&self, databuf: &mut Buffer);
+    async fn render<const X: usize, const Y: usize>(&self, databuf: &mut Buffer<X, Y>);
 }
 
 //pub struct Clock;
@@ -54,8 +59,54 @@ impl Program for RunningLight {
         debug!("Setting (x, y) = ({}, {})", self.x_offset, self.y_offset);
     }
 
-    async fn render(&self, databuf: &mut Buffer) {
-        databuf[self.previous.1][self.previous.0] = LED_OFF;
-        databuf[self.y_offset][self.x_offset] = LED_WHITE;
+    async fn render<const X: usize, const Y: usize>(&self, buffer: &mut Buffer<X, Y>) {
+        buffer.set(self.previous.0, self.previous.1, LED_OFF);
+        buffer.set(self.x_offset, self.y_offset, LED_WHITE);
+    }
+}
+
+#[derive(Default)]
+pub struct LedN<const N: usize> {
+    is_on: bool,
+}
+
+impl<const N: usize> Program for LedN<N> {
+    const TICKER_DURATION: Duration = Duration::from_secs(1);
+
+    async fn tick(&mut self) {
+        self.is_on = !self.is_on;
+    }
+
+    async fn render<const X: usize, const Y: usize>(&self, buffer: &mut Buffer<X, Y>) {
+        let color = if self.is_on { LED_WHITE } else { LED_OFF };
+
+        let x = N % X;
+        let y = N / Y;
+
+        debug!("Coloring LED {} at ({}, {})", N, x, y);
+
+        buffer.set(x, y, color);
+    }
+}
+
+#[derive(Default)]
+pub struct LedXY<const X: usize, const Y: usize> {
+    is_on: bool,
+}
+
+impl<const X: usize, const Y: usize> Program for LedXY<X, Y> {
+    const TICKER_DURATION: Duration = Duration::from_secs(1);
+
+    async fn tick(&mut self) {
+        self.is_on = !self.is_on;
+    }
+
+    async fn render<const SIZE_X: usize, const SIZE_Y: usize>(
+        &self,
+        buffer: &mut Buffer<SIZE_X, SIZE_Y>,
+    ) {
+        let color = if self.is_on { LED_WHITE } else { LED_OFF };
+        debug!("Coloring LED ({}, {})", X, Y);
+        buffer.set(X, Y, color);
     }
 }
