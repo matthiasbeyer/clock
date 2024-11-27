@@ -20,6 +20,7 @@ use smart_leds::RGB8;
 use crate::program::Program;
 use crate::program::RunningLight;
 
+mod tab;
 mod data;
 mod program;
 
