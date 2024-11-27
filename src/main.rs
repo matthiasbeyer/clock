@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-use data::Buffer;
 use defmt::*;
 use defmt_rtt as _;
 use embassy_executor::Spawner;
@@ -35,6 +34,8 @@ bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
 });
 
+type Buffer = crate::data::Buffer<NUM_LEDS_X, NUM_LEDS_Y>;
+
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
     let config = Config::default();
@@ -44,7 +45,7 @@ async fn main(_spawner: Spawner) {
         mut common, sm0, ..
     } = Pio::new(p.PIO0, Irqs);
 
-    let mut buffer: Buffer = [[RGB8::default(); NUM_LEDS_X]; NUM_LEDS_Y];
+    let mut buffer = Buffer::default();
 
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
@@ -63,44 +64,6 @@ where
     P: Instance,
 {
     let mut intermediate_buffer: [RGB8; NUM_LEDS] = [LED_OFF; NUM_LEDS];
-    // let mut n = 256;
-    // for y in 0..NUM_LEDS_Y {
-    //     for x in 0..NUM_LEDS_X {
-    //         intermediate_buffer[n] = buffer[y][x];
-    //         n += 1;
-
-    //         if n == 512  {
-    //             n = 0;
-    //         }
-    //     }
-    // }
-
-    for y in 0..NUM_LEDS_Y {
-        for x in 0..NUM_LEDS_X {
-            let n = if y >= 9 {
-                256 - (y - 9) - (x * 8)
-            } else {
-                256 + (8 - y) + (x * 8)
-            };
-            debug!("(x, y) = ({}, {}) = {}", x, y, n);
-
-            intermediate_buffer[n - 1] = buffer[y][x];
-        }
-    }
-
+    buffer.render_to_continuous_buffer::<{NUM_LEDS}>(&mut intermediate_buffer);
     ws2812.write(&intermediate_buffer).await;
 }
-
-// (0, 0)  = (32 * 8) + (8 - y) + (x * 8) = 264
-// (1, 0)  = (32 * 8) + (8 - y) + (x * 8) = 272
-// (2, 0)  = (32 * 8) + (8 - y) + (x * 8) = 280
-// (0, 1)  = (32 * 8) + (8 - y) + (x * 8) = 265
-// (0, 2)  = (32 * 8) + (8 - y) + (x * 8)
-// (1, 1)  = (32 * 8) + (8 - y) + (x * 8) = 265
-// (1, 2)  = (32 * 8) + (8 - y) + (x * 8) = 264
-//
-//
-// (0, 9)  = 256
-// (1, 9)  = 265 - 8  = 265 - (x*8)
-// (2, 9)  = 265 - 16 = 265 - (x*8)
-// (1, 10) = 265 - (y - 9) - (x*8)
