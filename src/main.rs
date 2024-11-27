@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use defmt::*;
+use blocks::Block;
 use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_rp::bind_interrupts;
@@ -14,23 +14,18 @@ use embassy_rp::pio_programs::ws2812::PioWs2812;
 use embassy_rp::pio_programs::ws2812::PioWs2812Program;
 use embassy_time::Ticker;
 use panic_probe as _;
-use program::LedN;
-use program::LedXY;
 use smart_leds::RGB8;
 
-use crate::program::Program;
-use crate::program::RunningLight;
-
-mod tab;
+mod blocks;
 mod data;
-mod program;
+mod programs;
+mod tab;
 
 pub const NUM_LEDS: usize = 512;
 pub const NUM_LEDS_X: usize = 32;
 pub const NUM_LEDS_Y: usize = 16;
 
-pub const LED_OFF: RGB8 = RGB8::new(0, 0, 0);
-pub const LED_WHITE: RGB8 = RGB8::new(10, 10, 10);
+const RGB_WHITE: RGB8 = RGB8::new(10, 10, 10);
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
@@ -47,15 +42,17 @@ async fn main(_spawner: Spawner) {
         mut common, sm0, ..
     } = Pio::new(p.PIO0, Irqs);
 
+    defmt::info!("Starting");
+
     let mut buffer = Buffer::default();
 
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
-    let mut light = LedXY::<4, 3>::default();
-    let mut ticker = Ticker::every(light.ticker_duration());
+
+    crate::blocks::character::Character::new('R', (1, 1), RGB_WHITE).render_to_buffer(&mut buffer);
+    // crate::blocks::line::Line::new((1, 1), (8, 8), RGB_WHITE).render_to_buffer(&mut buffer);
+    let mut ticker = Ticker::every(embassy_time::Duration::from_secs(1));
     loop {
-        light.tick().await;
-        light.render(&mut buffer).await;
         ticker.next().await;
         render(&mut leds, &buffer).await;
     }
@@ -65,7 +62,7 @@ async fn render<'d, P, const S: usize>(ws2812: &mut PioWs2812<'d, P, S, NUM_LEDS
 where
     P: Instance,
 {
-    let mut intermediate_buffer: [RGB8; NUM_LEDS] = [LED_OFF; NUM_LEDS];
-    buffer.render_to_continuous_buffer::<{NUM_LEDS}>(&mut intermediate_buffer);
+    let mut intermediate_buffer: [RGB8; NUM_LEDS] = [RGB8::default(); NUM_LEDS];
+    buffer.render_to_continuous_buffer::<{ NUM_LEDS }>(&mut intermediate_buffer);
     ws2812.write(&intermediate_buffer).await;
 }

@@ -21,6 +21,7 @@ fixed = "1.23.1"
 fixed-macro = "1.2"
 heapless = "0.8"
 log = "0.4"
+micromath = "2.1.0"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 pio = "0.2.1"
 pio-proc = "0.2"
