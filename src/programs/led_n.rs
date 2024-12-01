@@ -31,12 +31,16 @@ impl LedN {
 impl Program for LedN {
     const TICKER_DURATION: Duration = Duration::from_secs(1);
 
-    async fn tick(&mut self) {
+    async fn render<const X: usize, const Y: usize>(
+        &mut self,
+        buffer: &mut crate::data::Buffer<X, Y>,
+    ) {
         self.is_on = !self.is_on;
-    }
-
-    async fn render<const X: usize, const Y: usize>(&self, buffer: &mut crate::data::Buffer<X, Y>) {
-        let color = if self.is_on { RGB8::default() } else { self.color };
+        let color = if self.is_on {
+            RGB8::default()
+        } else {
+            self.color
+        };
 
         let x = self.n % X;
         let y = self.n / Y;

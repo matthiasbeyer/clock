@@ -23,12 +23,8 @@ impl RunningLight {
             color,
         }
     }
-}
 
-impl Program for RunningLight {
-    const TICKER_DURATION: Duration = Duration::from_millis(100);
-
-    async fn tick(&mut self) {
+    fn tick(&mut self) {
         self.previous = (self.x_offset, self.y_offset);
         self.x_offset += 1;
 
@@ -43,8 +39,13 @@ impl Program for RunningLight {
 
         defmt::debug!("Setting (x, y) = ({}, {})", self.x_offset, self.y_offset);
     }
+}
 
-    async fn render<const X: usize, const Y: usize>(&self, buffer: &mut Buffer<X, Y>) {
+impl Program for RunningLight {
+    const TICKER_DURATION: Duration = Duration::from_millis(100);
+
+    async fn render<const X: usize, const Y: usize>(&mut self, buffer: &mut Buffer<X, Y>) {
+        self.tick();
         buffer.set(self.previous.0, self.previous.1, RGB8::default());
         buffer.set(self.x_offset, self.y_offset, self.color);
     }

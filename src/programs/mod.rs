@@ -1,6 +1,6 @@
+pub mod duration;
 pub mod led_n;
 pub mod running_light;
-pub mod duration;
 
 pub trait Program {
     const TICKER_DURATION: embassy_time::Duration;
@@ -10,7 +10,8 @@ pub trait Program {
         Self::TICKER_DURATION
     }
 
-    async fn tick(&mut self);
-    async fn render<const X: usize, const Y: usize>(&self, databuf: &mut crate::data::Buffer<X, Y>);
+    async fn render<const X: usize, const Y: usize>(
+        &mut self,
+        databuf: &mut crate::data::Buffer<X, Y>,
+    );
 }
-
