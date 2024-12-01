@@ -17,7 +17,7 @@ impl Line {
 }
 
 impl Block for Line {
-    fn render_to_buffer<const X: usize, const Y: usize>(&self, buffer: &mut Buffer<X, Y>) {
+    fn render_to_buffer<const X: usize, const Y: usize>(&mut self, buffer: &mut Buffer<X, Y>) {
         let distance_x = self.end.0 as f32 - self.start.0 as f32;
         let distance_y = self.end.1 as f32 - self.start.1 as f32;
 

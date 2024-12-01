@@ -4,7 +4,7 @@ pub struct Clear;
 
 impl Block for Clear {
     fn render_to_buffer<const X: usize, const Y: usize>(
-        &self,
+        &mut self,
         buffer: &mut crate::data::Buffer<X, Y>,
     ) {
         for x in 0..X {

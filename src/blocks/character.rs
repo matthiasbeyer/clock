@@ -25,7 +25,7 @@ impl Character {
 
 impl Block for Character {
     fn render_to_buffer<const X: usize, const Y: usize>(
-        &self,
+        &mut self,
         buffer: &mut crate::data::Buffer<X, Y>,
     ) {
         macro_rules! l {

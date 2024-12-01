@@ -31,7 +31,7 @@ impl XY {
 
 impl Block for XY {
     fn render_to_buffer<const X: usize, const Y: usize>(
-        &self,
+        &mut self,
         buffer: &mut crate::data::Buffer<X, Y>,
     ) {
         let color = if self.is_on {
