@@ -18,6 +18,7 @@ use programs::Program;
 use smart_leds::RGB8;
 
 mod blocks;
+mod color;
 mod data;
 mod programs;
 mod tab;
