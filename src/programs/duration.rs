@@ -33,14 +33,22 @@ where
         databuf: &mut crate::data::Buffer<X, Y>,
     ) {
         crate::blocks::clear::Clear.render_to_buffer(databuf);
-        let duration_secs = self.get_duration().as_secs();
+        let duration = self.get_duration();
+        let duration = if duration >= embassy_time::Duration::from_secs(99 * 60 + 59) {
+            self.start_time = embassy_time::Instant::now();
+            self.get_duration()
+        } else {
+            duration
+        };
+        let duration_secs = duration.as_secs();
         let dur_min = (duration_secs / 60) as u8;
         let dur_sec = (duration_secs % 60) as u8;
 
         let ss = crate::utils::stackstr!(5, "{:02}:{:02}", dur_min, dur_sec);
 
         if self.colored_chars {
-            let mut text = crate::blocks::text::TextColored::new(ss.as_str(), (1, 1), &mut self.color);
+            let mut text =
+                crate::blocks::text::TextColored::new(ss.as_str(), (1, 1), &mut self.color);
             text.render_to_buffer(databuf);
         } else {
             let color = self.color.provide_next();
