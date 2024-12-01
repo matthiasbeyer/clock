@@ -52,7 +52,14 @@ async fn main(_spawner: Spawner) {
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
 
-    let duration_time = crate::programs::duration::Duration::new(RGB8::new(10, 0, 0));
+    let color_provider = {
+        let mins = (10, 10, 10);
+        let maxs = (30, 30, 30);
+        let increment = 5;
+        crate::color::rainbow::Rainbow::new(mins, maxs, increment)
+    };
+
+    let mut duration_time = crate::programs::duration::Duration::new(color_provider);
     let mut ticker = Ticker::every(embassy_time::Duration::from_secs(1));
     loop {
         duration_time.render(&mut buffer).await;
