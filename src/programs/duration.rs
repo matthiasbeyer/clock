@@ -1,5 +1,3 @@
-use smart_leds::RGB8;
-
 use super::Program;
 use crate::blocks::text::Text;
 use crate::blocks::Block;
@@ -7,13 +5,15 @@ use crate::blocks::Block;
 pub struct Duration<CP> {
     start_time: embassy_time::Instant,
     color: CP,
+    colored_chars: bool,
 }
 
 impl<CP> Duration<CP> {
-    pub fn new(color: CP) -> Self {
+    pub fn new(color: CP, colored_chars: bool) -> Self {
         Self {
             start_time: embassy_time::Instant::now(),
             color,
+            colored_chars,
         }
     }
 
@@ -39,8 +39,13 @@ where
 
         let ss = crate::utils::stackstr!(5, "{:02}:{:02}", dur_min, dur_sec);
 
-        let color = self.color.provide_next();
-        let text = Text::new(ss.as_str(), (1, 1), color);
-        text.render_to_buffer(databuf);
+        if self.colored_chars {
+            let mut text = crate::blocks::text::TextColored::new(ss.as_str(), (1, 1), &mut self.color);
+            text.render_to_buffer(databuf);
+        } else {
+            let color = self.color.provide_next();
+            let mut text = Text::new(ss.as_str(), (1, 1), color);
+            text.render_to_buffer(databuf);
+        }
     }
 }
