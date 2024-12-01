@@ -16,13 +16,20 @@ impl Duration {
             color,
         }
     }
+
+    fn get_duration(&self) -> embassy_time::Duration {
+        embassy_time::Instant::now().saturating_duration_since(self.start_time)
+    }
 }
 
 impl Program for Duration {
     const TICKER_DURATION: embassy_time::Duration = embassy_time::Duration::from_secs(1);
 
     async fn tick(&mut self) {
-        // empty
+        // Overflow protection
+        if self.get_duration() == embassy_time::Duration::from_secs(60 * 99 + 99) {
+            self.start_time = embassy_time::Instant::now()
+        }
     }
 
     async fn render<const X: usize, const Y: usize>(
@@ -30,9 +37,7 @@ impl Program for Duration {
         databuf: &mut crate::data::Buffer<X, Y>,
     ) {
         crate::blocks::clear::Clear.render_to_buffer(databuf);
-        let duration_secs = embassy_time::Instant::now()
-            .saturating_duration_since(self.start_time)
-            .as_secs();
+        let duration_secs = self.get_duration().as_secs();
         let dur_min = (duration_secs / 60) as u8;
         let dur_sec = (duration_secs % 60) as u8;
 
