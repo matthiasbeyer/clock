@@ -54,12 +54,13 @@ async fn main(_spawner: Spawner) {
 
     let color_provider = {
         let mins = (10, 10, 10);
-        let maxs = (30, 30, 30);
-        let increment = 5;
-        crate::color::rainbow::Rainbow::new(mins, maxs, increment)
+        let maxs = (20, 20, 20);
+        let increment = 10;
+        let inner = crate::color::rainbow::Rainbow::new(mins, maxs, increment);
+        crate::color::konst::ConstNColor::<4>::from_provider(inner)
     };
 
-    let mut duration_time = crate::programs::duration::Duration::new(color_provider);
+    let mut duration_time = crate::programs::duration::Duration::new(color_provider, true);
     let mut ticker = Ticker::every(embassy_time::Duration::from_secs(1));
     loop {
         duration_time.render(&mut buffer).await;
