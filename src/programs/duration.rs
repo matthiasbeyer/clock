@@ -65,7 +65,7 @@ where
 
         if self.colored_chars {
             let mut text =
-                crate::blocks::text::TextColored::new(ss.as_str(), (1, 1), &mut self.color);
+                crate::blocks::text::TextColored::new(ss.as_str(), (5, 5), &mut self.color);
             text.render_to_buffer(databuf);
         } else {
             let color = self.color.provide_next();
