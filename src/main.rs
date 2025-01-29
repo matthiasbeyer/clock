@@ -60,12 +60,70 @@ async fn main(_spawner: Spawner) {
         crate::color::konst::ConstNColor::<4>::from_provider(inner)
     };
 
-    let mut duration_time = crate::programs::duration::Duration::new(color_provider, true);
+    let programs = Programs {
+        duration_time: ProgramWithState::new(crate::programs::duration::Duration::new(
+            color_provider,
+            true,
+        )),
+        running_light: ProgramWithState::new(crate::programs::running_light::RunningLight::new({
+            let red = 10;
+            let green = 10;
+            let blue = 10;
+            RGB8::new(red, green, blue)
+        })),
+    };
+
     let mut ticker = Ticker::every(embassy_time::Duration::from_secs(1));
-    loop {
-        duration_time.render(&mut buffer).await;
-        render(&mut leds, &buffer).await;
-        ticker.next().await;
+    programs.run(&mut ticker, &mut buffer, &mut leds).await
+}
+
+struct ProgramWithState<P>
+where
+    P: Program,
+{
+    program: P,
+    state: P::State,
+}
+
+impl<P> ProgramWithState<P>
+where
+    P: Program,
+{
+    fn new(program: P) -> Self {
+        Self {
+            program,
+            state: P::State::default(),
+        }
+    }
+}
+
+struct Programs<CP>
+where
+    CP: crate::color::provider::Provider,
+{
+    // clock: crate::programs::clock::Clock,
+    duration_time: ProgramWithState<crate::programs::duration::Duration<CP>>,
+    running_light: ProgramWithState<crate::programs::running_light::RunningLight>,
+}
+
+impl<CP> Programs<CP>
+where
+    CP: crate::color::provider::Provider,
+{
+    async fn run<'d, P: Instance, const S: usize>(
+        mut self,
+        ticker: &mut Ticker,
+        buffer: &mut Buffer,
+        leds: &mut PioWs2812<'d, P, S, NUM_LEDS>,
+    ) {
+        loop {
+            self.duration_time
+                .program
+                .render(buffer, &mut self.duration_time.state)
+                .await;
+            render(leds, &buffer).await;
+            ticker.next().await;
+        }
     }
 }
 

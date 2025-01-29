@@ -5,18 +5,13 @@ use super::Program;
 
 #[derive(Default)]
 pub struct LedN {
-    is_on: bool,
     color: RGB8,
     n: usize,
 }
 
 impl LedN {
     pub fn new(n: usize, color: RGB8) -> Self {
-        Self {
-            is_on: false,
-            n,
-            color,
-        }
+        Self { n, color }
     }
 
     pub fn color(&self) -> &RGB8 {
@@ -28,15 +23,25 @@ impl LedN {
     }
 }
 
+#[derive(Default)]
+pub struct LedNState {
+    is_on: bool,
+}
+
+impl super::ProgramState for LedNState {}
+
 impl Program for LedN {
     const TICKER_DURATION: Duration = Duration::from_secs(1);
+
+    type State = LedNState;
 
     async fn render<const X: usize, const Y: usize>(
         &mut self,
         buffer: &mut crate::data::Buffer<X, Y>,
+        state: &mut Self::State,
     ) {
-        self.is_on = !self.is_on;
-        let color = if self.is_on {
+        state.is_on = !state.is_on;
+        let color = if state.is_on {
             RGB8::default()
         } else {
             self.color

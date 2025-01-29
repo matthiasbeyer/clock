@@ -8,22 +8,25 @@ use crate::NUM_LEDS_Y;
 
 #[derive(Default)]
 pub struct RunningLight {
-    x_offset: usize,
-    y_offset: usize,
-    previous: (usize, usize),
     color: RGB8,
 }
 
 impl RunningLight {
     pub fn new(color: RGB8) -> Self {
-        Self {
-            x_offset: 0,
-            y_offset: 0,
-            previous: (0, 0),
-            color,
-        }
+        Self { color }
     }
+}
 
+#[derive(Default)]
+pub struct RunningLightState {
+    previous: (usize, usize),
+    x_offset: usize,
+    y_offset: usize,
+}
+
+impl super::ProgramState for RunningLightState {}
+
+impl RunningLightState {
     fn tick(&mut self) {
         self.previous = (self.x_offset, self.y_offset);
         self.x_offset += 1;
@@ -44,9 +47,15 @@ impl RunningLight {
 impl Program for RunningLight {
     const TICKER_DURATION: Duration = Duration::from_millis(100);
 
-    async fn render<const X: usize, const Y: usize>(&mut self, buffer: &mut Buffer<X, Y>) {
-        self.tick();
-        buffer.set(self.previous.0, self.previous.1, RGB8::default());
-        buffer.set(self.x_offset, self.y_offset, self.color);
+    type State = RunningLightState;
+
+    async fn render<const X: usize, const Y: usize>(
+        &mut self,
+        buffer: &mut Buffer<X, Y>,
+        state: &mut Self::State,
+    ) {
+        state.tick();
+        buffer.set(state.previous.0, state.previous.1, RGB8::default());
+        buffer.set(state.x_offset, state.y_offset, self.color);
     }
 }

@@ -3,7 +3,6 @@ use crate::blocks::text::Text;
 use crate::blocks::Block;
 
 pub struct Duration<CP> {
-    start_time: embassy_time::Instant,
     color: CP,
     colored_chars: bool,
 }
@@ -11,12 +10,27 @@ pub struct Duration<CP> {
 impl<CP> Duration<CP> {
     pub fn new(color: CP, colored_chars: bool) -> Self {
         Self {
-            start_time: embassy_time::Instant::now(),
             color,
             colored_chars,
         }
     }
+}
 
+pub struct DurationState {
+    start_time: embassy_time::Instant,
+}
+
+impl Default for DurationState {
+    fn default() -> Self {
+        Self {
+            start_time: embassy_time::Instant::now(),
+        }
+    }
+}
+
+impl super::ProgramState for DurationState {}
+
+impl DurationState {
     fn get_duration(&self) -> embassy_time::Duration {
         embassy_time::Instant::now().saturating_duration_since(self.start_time)
     }
@@ -28,15 +42,18 @@ where
 {
     const TICKER_DURATION: embassy_time::Duration = embassy_time::Duration::from_secs(1);
 
+    type State = DurationState;
+
     async fn render<const X: usize, const Y: usize>(
         &mut self,
         databuf: &mut crate::data::Buffer<X, Y>,
+        state: &mut Self::State,
     ) {
         crate::blocks::clear::Clear.render_to_buffer(databuf);
-        let duration = self.get_duration();
+        let duration = state.get_duration();
         let duration = if duration >= embassy_time::Duration::from_secs(99 * 60 + 59) {
-            self.start_time = embassy_time::Instant::now();
-            self.get_duration()
+            state.start_time = embassy_time::Instant::now();
+            state.get_duration()
         } else {
             duration
         };
