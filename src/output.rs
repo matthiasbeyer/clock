@@ -60,7 +60,7 @@ impl embedded_graphics::prelude::DrawTarget for OutputBuffer {
                 continue;
             }
 
-            let pos = crate::tab::X_Y_TO_N_MAPPING_TABLE[y as usize][x as usize];
+            let pos = crate::mapping::X_Y_TO_N_MAPPING_TABLE[y as usize][x as usize];
             self.buf[pos] = rgb888_to_rgb8(pixel.1);
         }
         Ok(())

@@ -29,8 +29,8 @@ use embedded_graphics::text::Text;
 use embedded_graphics::Drawable;
 use panic_probe as _;
 
-mod data;
-mod tab;
+mod output;
+mod mapping;
 
 pub const NUM_LEDS: usize = 512;
 pub const NUM_LEDS_X: usize = 32;
@@ -55,7 +55,7 @@ async fn main(_spawner: Spawner) {
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
 
-    let mut display = data::OutputBuffer::new();
+    let mut display = output::OutputBuffer::new();
     let color = <Rgb888 as WebColors>::CSS_DARK_BLUE;
     {
         let thin_stroke = PrimitiveStyle::with_stroke(color, 1);
