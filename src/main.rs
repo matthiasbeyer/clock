@@ -1,21 +1,33 @@
 #![no_std]
 #![no_main]
 
-use blocks::Block;
 use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_rp::bind_interrupts;
 use embassy_rp::config::Config;
 use embassy_rp::peripherals::PIO0;
-use embassy_rp::pio::Instance;
 use embassy_rp::pio::InterruptHandler;
 use embassy_rp::pio::Pio;
 use embassy_rp::pio_programs::ws2812::PioWs2812;
 use embassy_rp::pio_programs::ws2812::PioWs2812Program;
-use embassy_time::Ticker;
+use embedded_graphics::mono_font::ascii::FONT_6X10;
+use embedded_graphics::mono_font::MonoTextStyle;
+use embedded_graphics::pixelcolor::Rgb888;
+use embedded_graphics::prelude::Dimensions;
+use embedded_graphics::prelude::Point;
+use embedded_graphics::prelude::Primitive;
+use embedded_graphics::prelude::Size;
+use embedded_graphics::prelude::WebColors;
+use embedded_graphics::primitives::Circle;
+use embedded_graphics::primitives::PrimitiveStyle;
+use embedded_graphics::primitives::PrimitiveStyleBuilder;
+use embedded_graphics::primitives::Rectangle;
+use embedded_graphics::primitives::StrokeAlignment;
+use embedded_graphics::primitives::Triangle;
+use embedded_graphics::text::Alignment;
+use embedded_graphics::text::Text;
+use embedded_graphics::Drawable;
 use panic_probe as _;
-use programs::Program;
-use smart_leds::RGB8;
 
 mod blocks;
 mod color;
@@ -28,13 +40,9 @@ pub const NUM_LEDS: usize = 512;
 pub const NUM_LEDS_X: usize = 32;
 pub const NUM_LEDS_Y: usize = 16;
 
-const RGB_WHITE: RGB8 = RGB8::new(10, 10, 10);
-
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
 });
-
-type Buffer = crate::data::Buffer<NUM_LEDS_X, NUM_LEDS_Y>;
 
 #[embassy_executor::main]
 async fn main(_spawner: Spawner) {
@@ -47,91 +55,69 @@ async fn main(_spawner: Spawner) {
 
     defmt::info!("Starting");
 
-    let mut buffer = Buffer::default();
 
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
 
-    let color_provider = {
-        let mins = (10, 10, 10);
-        let maxs = (20, 20, 20);
-        let increment = 10;
-        let inner = crate::color::rainbow::Rainbow::new(mins, maxs, increment);
-        crate::color::konst::ConstNColor::<4>::from_provider(inner)
-    };
+    let mut display = data::OutputBuffer::new();
+    let color = <Rgb888 as WebColors>::CSS_DARK_BLUE;
+    {
+        let thin_stroke = PrimitiveStyle::with_stroke(color, 1);
+        let thick_stroke = PrimitiveStyle::with_stroke(color, 3);
+        let border_stroke = PrimitiveStyleBuilder::new()
+            .stroke_color(color)
+            .stroke_width(3)
+            .stroke_alignment(StrokeAlignment::Inside)
+            .build();
+        let fill = PrimitiveStyle::with_fill(color);
+        let character_style = MonoTextStyle::new(&FONT_6X10, color);
 
-    let programs = Programs {
-        duration_time: ProgramWithState::new(crate::programs::duration::Duration::new(
-            color_provider,
-            true,
-        )),
-        running_light: ProgramWithState::new(crate::programs::running_light::RunningLight::new({
-            let red = 10;
-            let green = 10;
-            let blue = 10;
-            RGB8::new(red, green, blue)
-        })),
-    };
+        let yoffset = 10;
 
-    let mut ticker = Ticker::every(embassy_time::Duration::from_secs(1));
-    programs.run(&mut ticker, &mut buffer, &mut leds).await
-}
+        // Draw a 3px wide outline around the display.
+        display
+            .bounding_box()
+            .into_styled(border_stroke)
+            .draw(&mut display)
+            .unwrap();
 
-struct ProgramWithState<P>
-where
-    P: Program,
-{
-    program: P,
-    state: P::State,
-}
+        // Draw a triangle.
+        Triangle::new(
+            Point::new(16, 16 + yoffset),
+            Point::new(16 + 16, 16 + yoffset),
+            Point::new(16 + 8, yoffset),
+        )
+        .into_styled(thin_stroke)
+        .draw(&mut display)
+        .unwrap();
 
-impl<P> ProgramWithState<P>
-where
-    P: Program,
-{
-    fn new(program: P) -> Self {
-        Self {
-            program,
-            state: P::State::default(),
-        }
+        // Draw a filled square
+        Rectangle::new(Point::new(52, yoffset), Size::new(16, 16))
+            .into_styled(fill)
+            .draw(&mut display)
+            .unwrap();
+
+        // Draw a circle with a 3px wide stroke.
+        Circle::new(Point::new(88, yoffset), 17)
+            .into_styled(thick_stroke)
+            .draw(&mut display)
+            .unwrap();
+
+        // Draw centered text.
+        let text = "embedded-graphics";
+        Text::with_alignment(
+            text,
+            display.bounding_box().center() + Point::new(0, 15),
+            character_style,
+            Alignment::Center,
+        )
+        .draw(&mut display)
+        .unwrap();
     }
-}
 
-struct Programs<CP>
-where
-    CP: crate::color::provider::Provider,
-{
-    // clock: crate::programs::clock::Clock,
-    duration_time: ProgramWithState<crate::programs::duration::Duration<CP>>,
-    running_light: ProgramWithState<crate::programs::running_light::RunningLight>,
-}
+    display.render_into(&mut leds).await;
 
-impl<CP> Programs<CP>
-where
-    CP: crate::color::provider::Provider,
-{
-    async fn run<'d, P: Instance, const S: usize>(
-        mut self,
-        ticker: &mut Ticker,
-        buffer: &mut Buffer,
-        leds: &mut PioWs2812<'d, P, S, NUM_LEDS>,
-    ) {
-        loop {
-            self.duration_time
-                .program
-                .render(buffer, &mut self.duration_time.state)
-                .await;
-            render(leds, &buffer).await;
-            ticker.next().await;
-        }
+    loop {
+        embassy_time::Timer::after(embassy_time::Duration::from_secs(1)).await;
     }
-}
-
-async fn render<'d, P, const S: usize>(ws2812: &mut PioWs2812<'d, P, S, NUM_LEDS>, buffer: &Buffer)
-where
-    P: Instance,
-{
-    let mut intermediate_buffer: [RGB8; NUM_LEDS] = [RGB8::default(); NUM_LEDS];
-    buffer.render_to_continuous_buffer::<{ NUM_LEDS }>(&mut intermediate_buffer);
-    ws2812.write(&intermediate_buffer).await;
 }
