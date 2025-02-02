@@ -29,12 +29,8 @@ use embedded_graphics::text::Text;
 use embedded_graphics::Drawable;
 use panic_probe as _;
 
-mod blocks;
-mod color;
 mod data;
-mod programs;
 mod tab;
-mod utils;
 
 pub const NUM_LEDS: usize = 512;
 pub const NUM_LEDS_X: usize = 32;
