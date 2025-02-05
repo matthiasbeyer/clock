@@ -15,21 +15,18 @@ use embedded_graphics::pixelcolor::Rgb888;
 use embedded_graphics::prelude::Dimensions;
 use embedded_graphics::prelude::Point;
 use embedded_graphics::prelude::Primitive;
-use embedded_graphics::prelude::Size;
 use embedded_graphics::prelude::WebColors;
-use embedded_graphics::primitives::Circle;
-use embedded_graphics::primitives::PrimitiveStyle;
 use embedded_graphics::primitives::PrimitiveStyleBuilder;
-use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::primitives::StrokeAlignment;
-use embedded_graphics::primitives::Triangle;
 use embedded_graphics::text::Alignment;
 use embedded_graphics::text::Text;
 use embedded_graphics::Drawable;
 use panic_probe as _;
 
-mod output;
+mod color;
 mod mapping;
+mod output;
+mod util;
 
 pub const NUM_LEDS: usize = 512;
 pub const NUM_LEDS_X: usize = 32;
@@ -50,19 +47,26 @@ async fn main(_spawner: Spawner) {
 
     defmt::info!("Starting");
 
-
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_16, &program);
 
-    let mut display = output::OutputBuffer::new();
-    let color = <Rgb888 as WebColors>::CSS_DARK_BLUE;
-    {
+    let mut color_iter = crate::color::ColorIter::new(10)
+        .with_delay(10)
+        .cycle();
+
+    let mut start_time = embassy_time::Instant::now();
+
+    loop {
+        let color = color_iter.next().unwrap();
+        let character_style =
+            MonoTextStyle::new(&embedded_graphics::mono_font::ascii::FONT_5X8, color);
+        let mut display = output::OutputBuffer::new();
+
         let border_stroke = PrimitiveStyleBuilder::new()
             .stroke_color(color)
             .stroke_width(1)
             .stroke_alignment(StrokeAlignment::Inside)
             .build();
-        let character_style = MonoTextStyle::new(&embedded_graphics::mono_font::ascii::FONT_4X6, color);
 
         // Draw a px wide outline around the display.
         display
@@ -72,30 +76,31 @@ async fn main(_spawner: Spawner) {
             .unwrap();
 
         // Draw centered text.
-        let hello = "hello";
-        let world = "world";
+        let time_text = {
+            let duration = embassy_time::Instant::now().duration_since(start_time);
+            let duration = if duration >= embassy_time::Duration::from_secs(99 * 60 + 59) {
+                start_time = embassy_time::Instant::now();
+                embassy_time::Instant::now().duration_since(start_time)
+            } else {
+                duration
+            };
+
+            let duration_secs = duration.as_secs();
+            let dur_min = (duration_secs / 60) as u8;
+            let dur_sec = (duration_secs % 60) as u8;
+
+            crate::stackstr!(5, "{:02}:{:02}", dur_min, dur_sec)
+        };
+
         Text::with_alignment(
-            hello,
-            display.bounding_box().center() + Point::new(0, -1),
+            time_text.as_str(),
+            display.bounding_box().center() + Point::new(0, 3),
             character_style,
             Alignment::Center,
         )
         .draw(&mut display)
         .unwrap();
 
-        Text::with_alignment(
-            world,
-            display.bounding_box().center() + Point::new(0, 6),
-            character_style,
-            Alignment::Center,
-        )
-        .draw(&mut display)
-        .unwrap();
-    }
-
-    display.render_into(&mut leds).await;
-
-    loop {
-        embassy_time::Timer::after(embassy_time::Duration::from_secs(1)).await;
+        display.render_into(&mut leds).await;
     }
 }
