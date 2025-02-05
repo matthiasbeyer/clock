@@ -10,7 +10,6 @@ use embassy_rp::pio::InterruptHandler;
 use embassy_rp::pio::Pio;
 use embassy_rp::pio_programs::ws2812::PioWs2812;
 use embassy_rp::pio_programs::ws2812::PioWs2812Program;
-use embedded_graphics::mono_font::ascii::FONT_6X10;
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Rgb888;
 use embedded_graphics::prelude::Dimensions;
@@ -58,52 +57,35 @@ async fn main(_spawner: Spawner) {
     let mut display = output::OutputBuffer::new();
     let color = <Rgb888 as WebColors>::CSS_DARK_BLUE;
     {
-        let thin_stroke = PrimitiveStyle::with_stroke(color, 1);
-        let thick_stroke = PrimitiveStyle::with_stroke(color, 3);
         let border_stroke = PrimitiveStyleBuilder::new()
             .stroke_color(color)
-            .stroke_width(3)
+            .stroke_width(1)
             .stroke_alignment(StrokeAlignment::Inside)
             .build();
-        let fill = PrimitiveStyle::with_fill(color);
-        let character_style = MonoTextStyle::new(&FONT_6X10, color);
+        let character_style = MonoTextStyle::new(&embedded_graphics::mono_font::ascii::FONT_4X6, color);
 
-        let yoffset = 10;
-
-        // Draw a 3px wide outline around the display.
+        // Draw a px wide outline around the display.
         display
             .bounding_box()
             .into_styled(border_stroke)
             .draw(&mut display)
             .unwrap();
 
-        // Draw a triangle.
-        Triangle::new(
-            Point::new(16, 16 + yoffset),
-            Point::new(16 + 16, 16 + yoffset),
-            Point::new(16 + 8, yoffset),
+        // Draw centered text.
+        let hello = "hello";
+        let world = "world";
+        Text::with_alignment(
+            hello,
+            display.bounding_box().center() + Point::new(0, -1),
+            character_style,
+            Alignment::Center,
         )
-        .into_styled(thin_stroke)
         .draw(&mut display)
         .unwrap();
 
-        // Draw a filled square
-        Rectangle::new(Point::new(52, yoffset), Size::new(16, 16))
-            .into_styled(fill)
-            .draw(&mut display)
-            .unwrap();
-
-        // Draw a circle with a 3px wide stroke.
-        Circle::new(Point::new(88, yoffset), 17)
-            .into_styled(thick_stroke)
-            .draw(&mut display)
-            .unwrap();
-
-        // Draw centered text.
-        let text = "embedded-graphics";
         Text::with_alignment(
-            text,
-            display.bounding_box().center() + Point::new(0, 15),
+            world,
+            display.bounding_box().center() + Point::new(0, 6),
             character_style,
             Alignment::Center,
         )
