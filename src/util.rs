@@ -1,5 +1,6 @@
-use core::{fmt, str::from_utf8_unchecked};
+use core::fmt;
 use core::mem::MaybeUninit;
+use core::str::from_utf8_unchecked;
 
 pub struct StackStr<const BUF_SIZE: usize> {
     buffer: [u8; BUF_SIZE],
@@ -53,11 +54,10 @@ impl<const BUF_SIZE: usize> fmt::Write for StackStr<BUF_SIZE> {
 #[macro_export]
 macro_rules! stackstr {
     ($size:expr, $($arg:tt)*) => {{
-        let mut ss = $crate::utils::stackstr::StackStr::<$size>::new();
+        let mut ss = $crate::util::StackStr::<$size>::new();
 
         // Panic on buffer overflow
         ss.format(core::format_args!($($arg)*)).expect("Buffer overflow");
         ss
     }}
 }
-
