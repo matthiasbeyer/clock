@@ -15,6 +15,22 @@
         "type": "github"
       }
     },
+    "embassy": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1739438850,
+        "narHash": "sha256-PP5eoR5026CenDF8pOaNHDxQ5WQISF6Izw4nz2xsFWA=",
+        "owner": "embassy-rs",
+        "repo": "embassy",
+        "rev": "9b178facc95bc5fdcf43dddd0a2904e65fda41d6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "embassy-rs",
+        "repo": "embassy",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -51,6 +67,7 @@
     "root": {
       "inputs": {
         "crane": "crane",
+        "embassy": "embassy",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
         "rust-overlay": "rust-overlay"
