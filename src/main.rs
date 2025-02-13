@@ -15,7 +15,7 @@ use embassy_net::StackResources;
 use embassy_rp::bind_interrupts;
 use embassy_rp::config::Config;
 use embassy_rp::gpio::Output;
-use embassy_rp::peripherals::DMA_CH0;
+use embassy_rp::peripherals::DMA_CH1;
 use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::InterruptHandler;
 use embassy_rp::pio::Pio;
@@ -60,7 +60,7 @@ static FIRMWARE_CLM: &[u8] = include_bytes!(env!("CYW43_FIRMWARE_CLM_BIN"));
 
 #[embassy_executor::task]
 async fn cyw43_task(
-    runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH0>>,
+    runner: cyw43::Runner<'static, Output<'static>, PioSpi<'static, PIO0, 0, DMA_CH1>>,
 ) -> ! {
     runner.run().await
 }
@@ -93,7 +93,7 @@ async fn main(spawner: Spawner) {
         cs,
         p.PIN_24,
         p.PIN_29,
-        p.DMA_CH0,
+        p.DMA_CH1,
     );
 
     let state = NETWORK_STATE.init(cyw43::State::new());
