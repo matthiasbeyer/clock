@@ -26,11 +26,6 @@ impl<const BUF_SIZE: usize> StackStr<BUF_SIZE> {
         // We are really sure, that the buffer contains only valid utf8 characters
         unsafe { from_utf8_unchecked(&self.buffer[..self.used]) }
     }
-
-    /// Get a reference to the result as a slice inside the buffer as bytes
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.buffer[..self.used]
-    }
 }
 
 impl<const BUF_SIZE: usize> fmt::Write for StackStr<BUF_SIZE> {
