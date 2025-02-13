@@ -178,28 +178,29 @@ async fn main(spawner: Spawner) {
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm1, p.DMA_CH0, p.PIN_16, &program);
 
-    let mut color_iter = crate::color::ColorIter::new(10, embassy_time::Duration::from_secs(1));
-
-    let mut color = color_iter.next().unwrap();
-    let mut clock = crate::clock::Timer::new(
-        embassy_time::Instant::now(),
-        embassy_time::Duration::from_secs(1),
-    );
-    let mut border = crate::bounding_box::BoundingBox::new();
-
     let addr: IpAddr = ntp_addrs[0].into();
 
     let result = sntpc::get_time(SocketAddr::from((addr, 123)), &socket, context).await;
-    match result {
+    let ntp_result = match result {
         Ok(time) => {
             defmt::info!("Time: {:?}", time);
+            time
         }
         Err(e) => {
             defmt::error!("Error getting time: {:?}", e);
+            loop {
+                embassy_time::Timer::after(Duration::from_secs(60)).await
+            }
         }
-    }
-
+    };
     let last_clock_update = embassy_time::Instant::now();
+
+    let mut color_iter = crate::color::ColorIter::new(10, embassy_time::Duration::from_secs(1));
+
+    let mut color = color_iter.next().unwrap();
+    let mut clock = crate::clock::Clock::new(ntp_result, last_clock_update);
+    let mut border = crate::bounding_box::BoundingBox::new();
+
     loop {
         let cycle_start_time = embassy_time::Instant::now();
         if cycle_start_time.duration_since(last_clock_update) > Duration::from_secs(60) {
@@ -208,6 +209,7 @@ async fn main(spawner: Spawner) {
             match result {
                 Ok(time) => {
                     defmt::info!("Time: {:?}", time);
+                    clock.set_system_time(time, embassy_time::Instant::now());
                 }
                 Err(e) => {
                     defmt::error!("Error getting time: {:?}", e);
@@ -219,14 +221,12 @@ async fn main(spawner: Spawner) {
             color = color_iter.next().unwrap();
         }
 
+        defmt::debug!("Rendering");
         let mut display = output::OutputBuffer::new();
-
-        if clock.needs_cycle() {
-            border.render_to_display(&mut display, color);
-            clock.render_to_display(&mut display, color);
-        }
-
+        border.render_to_display(&mut display, color);
+        clock.render_to_display(&mut display, color);
         display.render_into(&mut leds).await;
+        defmt::debug!("Rendering done");
 
         let min_cycle_duration = [
             color_iter.get_next_cycle_time(),
