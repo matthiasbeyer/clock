@@ -163,15 +163,18 @@ async fn main(spawner: Spawner) {
 
     let context = NtpContext::new(crate::ntp::Timestamp::default());
 
-    let ntp_addrs = stack
-        .dns_query(NTP_SERVER, DnsQueryType::A)
-        .await
-        .expect("Failed to resolve DNS");
+    let ntp_addrs = {
+        let addrs = stack
+            .dns_query(NTP_SERVER, DnsQueryType::A)
+            .await
+            .expect("Failed to resolve DNS");
 
-    if ntp_addrs.is_empty() {
-        defmt::error!("Failed to resolve DNS");
-        return;
-    }
+        if addrs.is_empty() {
+            defmt::error!("Failed to resolve DNS: NTP_SERVER = {}", NTP_SERVER);
+            return;
+        }
+        addrs
+    };
 
     defmt::info!("Starting");
 
