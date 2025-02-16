@@ -51,7 +51,7 @@ bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
 });
 
-static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
+static UDP_RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
 
 static NETWORK_STATE: StaticCell<cyw43::State> = StaticCell::new();
 
@@ -110,8 +110,8 @@ async fn main(spawner: Spawner) {
     let config = embassy_net::Config::dhcpv4(Default::default());
 
     // Init network stack
-    let (stack, runner) =
-        embassy_net::new(net_device, config, RESOURCES.init(StackResources::new()), 0);
+    let (udp_stack, udp_runner) =
+        embassy_net::new(net_device, config, UDP_RESOURCES.init(StackResources::new()), 0);
 
     // Launch network task
     spawner.spawn(net_task(runner)).unwrap();
@@ -130,20 +130,20 @@ async fn main(spawner: Spawner) {
 
     // Wait for DHCP, not necessary when using static IP
     defmt::info!("waiting for DHCP...");
-    while !stack.is_config_up() {
+    while !udp_stack.is_config_up() {
         Timer::after_millis(100).await;
     }
     defmt::info!("DHCP is now up!");
 
     defmt::info!("waiting for link up...");
-    while !stack.is_link_up() {
+    while !udp_stack.is_link_up() {
         Timer::after_millis(500).await;
     }
     defmt::info!("Link is up!");
 
     // Wait for the tap interface to be up before continuing
     defmt::info!("waiting for stack to be up...");
-    stack.wait_config_up().await;
+    udp_stack.wait_config_up().await;
     defmt::info!("Stack is up!");
 
     // Create UDP socket
@@ -153,7 +153,7 @@ async fn main(spawner: Spawner) {
     let mut tx_buffer = [0; 4096];
 
     let mut udp_socket = UdpSocket::new(
-        stack,
+        udp_stack,
         &mut rx_meta,
         &mut rx_buffer,
         &mut tx_meta,
@@ -164,7 +164,7 @@ async fn main(spawner: Spawner) {
     let context = NtpContext::new(crate::ntp::Timestamp::default());
 
     let ntp_addrs = {
-        let addrs = stack
+        let addrs = udp_stack
             .dns_query(NTP_SERVER, DnsQueryType::A)
             .await
             .expect("Failed to resolve DNS");
