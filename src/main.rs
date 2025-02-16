@@ -152,14 +152,14 @@ async fn main(spawner: Spawner) {
     let mut tx_meta = [PacketMetadata::EMPTY; 16];
     let mut tx_buffer = [0; 4096];
 
-    let mut socket = UdpSocket::new(
+    let mut udp_socket = UdpSocket::new(
         stack,
         &mut rx_meta,
         &mut rx_buffer,
         &mut tx_meta,
         &mut tx_buffer,
     );
-    socket.bind(123).unwrap();
+    udp_socket.bind(123).unwrap();
 
     let context = NtpContext::new(crate::ntp::Timestamp::default());
 
@@ -180,7 +180,7 @@ async fn main(spawner: Spawner) {
 
     let addr: IpAddr = ntp_addrs[0].into();
 
-    let result = sntpc::get_time(SocketAddr::from((addr, 123)), &socket, context).await;
+    let result = sntpc::get_time(SocketAddr::from((addr, 123)), &udp_socket, context).await;
     let ntp_result = match result {
         Ok(time) => {
             defmt::info!("Time: {:?}", time);
@@ -205,7 +205,7 @@ async fn main(spawner: Spawner) {
         let cycle_start_time = embassy_time::Instant::now();
         if cycle_start_time.duration_since(last_clock_update) > Duration::from_secs(60) {
             defmt::info!("Updating time");
-            let result = sntpc::get_time(SocketAddr::from((addr, 123)), &socket, context).await;
+            let result = sntpc::get_time(SocketAddr::from((addr, 123)), &udp_socket, context).await;
             match result {
                 Ok(time) => {
                     defmt::info!("Time: {:?}", time);
