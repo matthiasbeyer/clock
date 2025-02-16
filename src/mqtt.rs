@@ -32,6 +32,24 @@ pub enum MqttClientError {
 
     #[error("MQTT Client error: {:?}", .0)]
     MqttError(rust_mqtt::packet::v5::reason_codes::ReasonCode),
+
+    #[error("MQTT Client PING failed: {:?}", .0)]
+    Ping(rust_mqtt::packet::v5::reason_codes::ReasonCode),
+
+    #[error("MQTT Client Receive failed: {:?}", .0)]
+    Recv(rust_mqtt::packet::v5::reason_codes::ReasonCode),
+
+    #[error("Subscribing to topic '{}' failed: {:?}", .0, .1)]
+    Subscribing(
+        &'static str,
+        rust_mqtt::packet::v5::reason_codes::ReasonCode,
+    ),
+}
+
+impl defmt::Format for MqttClientError {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "MqttClientError: {}", self)
+    }
 }
 
 const MQTT_RECV_BUFFER_LEN: usize = 80;
@@ -140,7 +158,25 @@ impl<'network> MqttClient<'network> {
             }
         }
 
+        for topic in [
+            crate::MQTT_TOPIC_START_PROGRAM,
+            crate::MQTT_TOPIC_TIMEZONE_OFFSET,
+        ] {
+            match client.subscribe_to_topic(topic).await {
+                Ok(()) => defmt::info!("Subscribing to '{}' succeeded", topic),
+                Err(error) => {
+                    defmt::error!("Subscribing to '{}' failed: {}", topic, error);
+                    return Err(MqttClientError::Subscribing(topic, error));
+                }
+            }
+        }
+        defmt::info!("Subscriptons done");
+
         Ok(Self { client })
+    }
+
+    pub async fn ping(&mut self) -> Result<(), MqttClientError> {
+        self.client.send_ping().await.map_err(MqttClientError::Ping)
     }
 
     pub async fn booting(&mut self) -> Result<(), MqttClientError> {
@@ -170,4 +206,23 @@ impl<'network> MqttClient<'network> {
             }
         }
     }
+
+    pub async fn next_payload(&mut self) -> Result<MqttPayload, MqttClientError> {
+        match self
+            .client
+            .receive_message()
+            .await
+            .map_err(MqttClientError::Recv)?
+        {
+            (crate::MQTT_TOPIC_TIMEZONE_OFFSET, payload) => Ok(MqttPayload::Timezone(payload)),
+            (crate::MQTT_TOPIC_START_PROGRAM, payload) => Ok(MqttPayload::StartProgram(payload)),
+            (topic, payload) => Ok(MqttPayload::Unknown { topic, payload }),
+        }
+    }
+}
+
+pub enum MqttPayload<'p> {
+    Timezone(&'p [u8]),
+    StartProgram(&'p [u8]),
+    Unknown { topic: &'p str, payload: &'p [u8] },
 }

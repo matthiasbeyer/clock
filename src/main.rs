@@ -17,6 +17,7 @@ use embassy_rp::pio_programs::ws2812::PioWs2812;
 use embassy_rp::pio_programs::ws2812::PioWs2812Program;
 use embassy_time::Duration;
 use embassy_time::Timer;
+use embassy_time::WithTimeout;
 use panic_probe as _;
 use render::RenderToDisplay;
 use render::Renderable;
@@ -44,6 +45,20 @@ const MQTT_USER: &str = env!("MQTT_USER");
 const MQTT_PASSWORD: &str = env!("MQTT_PASSWORD");
 const MQTT_CLIENT_ID: &str = env!("MQTT_CLIENT_ID");
 const MQTT_TOPIC_DEVICE_STATE: &str = concat!("device/", env!("MQTT_DEVICE_ID"), "/state");
+
+macro_rules! topic {
+    (state: $name:literal) => {
+        concat!("device/", env!("MQTT_DEVICE_ID"), "/state/", $name)
+    };
+
+    (command: $name:literal) => {
+        concat!("device/", env!("MQTT_DEVICE_ID"), "/command/", $name)
+    };
+}
+
+const MQTT_TOPIC_CURRENT_PROGRAM: &str = topic!(state: "current_program");
+const MQTT_TOPIC_START_PROGRAM: &str = topic!(command: "start_program");
+const MQTT_TOPIC_TIMEZONE_OFFSET: &str = topic!(command: "timezone_offset");
 
 const WIFI_NETWORK: &str = env!("WIFI_NETWORK");
 const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
@@ -196,8 +211,21 @@ async fn main(spawner: Spawner) {
     let mut clock = crate::clock::Clock::new(ntp_result, last_clock_update);
     let mut border = crate::bounding_box::BoundingBox::new();
 
+    let mut timezone_offset = None;
+
     loop {
         let cycle_start_time = embassy_time::Instant::now();
+
+        match mqtt_client
+            .next_payload()
+            .with_timeout(embassy_time::Duration::from_millis(100))
+            .await
+        {
+            Err(_timeout) => { /* do nothing */ }
+            Ok(Err(mqtt_error)) => defmt::error!("MQTT Error: {:?}", mqtt_error),
+            Ok(Ok(payload)) => handle_next_mqtt_payload(payload, &mut timezone_offset),
+        }
+
         if cycle_start_time.duration_since(last_clock_update) > Duration::from_secs(60) {
             defmt::info!("Updating time");
             let result = ntp_client.get_time(&udp_socket).await;
@@ -239,6 +267,37 @@ async fn main(spawner: Spawner) {
             {
                 embassy_time::Timer::after(sleep_time).await
             }
+        }
+    }
+}
+
+fn handle_next_mqtt_payload(payload: mqtt::MqttPayload, timezone_offset: &mut Option<Duration>) {
+    match payload {
+        mqtt::MqttPayload::Timezone(pl) => {
+            let s = match core::str::from_utf8(pl) {
+                Ok(s) => s,
+                Err(_) => {
+                    defmt::warn!("{} is not valid UTF8", pl);
+                    return;
+                }
+            };
+
+            match s.parse::<u64>() {
+                Ok(secs) => *timezone_offset = Some(Duration::from_secs(secs)),
+                Err(_) => defmt::warn!("Failed to parse {} as u64", pl),
+            };
+        }
+
+        mqtt::MqttPayload::StartProgram(pl) => {
+            todo!()
+        }
+
+        mqtt::MqttPayload::Unknown { topic, payload } => {
+            defmt::debug!(
+                "Received MQTT message on unhandled topic '{}': {}",
+                topic,
+                payload
+            );
         }
     }
 }
