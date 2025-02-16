@@ -9,6 +9,7 @@ use cyw43_pio::PioSpi;
 use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_net::dns::DnsQueryType;
+use embassy_net::tcp::TcpSocket;
 use embassy_net::udp::PacketMetadata;
 use embassy_net::udp::UdpSocket;
 use embassy_net::StackResources;
@@ -38,7 +39,18 @@ mod output;
 mod render;
 mod util;
 
-const NTP_SERVER: &str = "pool.ntp.org";
+const NTP_SERVER: &str = env!("NTP_SERVER");
+
+const MQTT_BROKER_ADDR: &str = env!("MQTT_BROKER_ADDR");
+const MQTT_BROKER_PORT: u16 = match u16::from_str_radix(env!("MQTT_BROKER_PORT"), 10) {
+    Err(_error) => panic!("MQTT_BROKER_PORT is not a valid u16"),
+    Ok(port) => port,
+};
+
+const MQTT_USER: &str = env!("MQTT_USER");
+const MQTT_PASSWORD: &str = env!("MQTT_PASSWORD");
+const MQTT_CLIENT_ID: &str = env!("MQTT_CLIENT_ID");
+const MQTT_TOPIC_DEVICE_STATE: &str = concat!("device/", env!("MQTT_DEVICE_ID"), "/state");
 
 const WIFI_NETWORK: &str = env!("WIFI_NETWORK");
 const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
@@ -51,7 +63,7 @@ bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
 });
 
-static UDP_RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
+static NETWORK_STACK_RESOURCES: StaticCell<StackResources<6>> = StaticCell::new();
 
 static NETWORK_STATE: StaticCell<cyw43::State> = StaticCell::new();
 
@@ -110,8 +122,12 @@ async fn main(spawner: Spawner) {
     let config = embassy_net::Config::dhcpv4(Default::default());
 
     // Init network stack
-    let (udp_stack, udp_runner) =
-        embassy_net::new(net_device, config, UDP_RESOURCES.init(StackResources::new()), 0);
+    let (network_stack, runner) = embassy_net::new(
+        net_device,
+        config,
+        NETWORK_STACK_RESOURCES.init(StackResources::new()),
+        0,
+    );
 
     // Launch network task
     spawner.spawn(net_task(runner)).unwrap();
@@ -130,20 +146,20 @@ async fn main(spawner: Spawner) {
 
     // Wait for DHCP, not necessary when using static IP
     defmt::info!("waiting for DHCP...");
-    while !udp_stack.is_config_up() {
+    while !network_stack.is_config_up() {
         Timer::after_millis(100).await;
     }
     defmt::info!("DHCP is now up!");
 
     defmt::info!("waiting for link up...");
-    while !udp_stack.is_link_up() {
+    while !network_stack.is_link_up() {
         Timer::after_millis(500).await;
     }
     defmt::info!("Link is up!");
 
     // Wait for the tap interface to be up before continuing
     defmt::info!("waiting for stack to be up...");
-    udp_stack.wait_config_up().await;
+    network_stack.wait_config_up().await;
     defmt::info!("Stack is up!");
 
     // Create UDP socket
@@ -153,7 +169,7 @@ async fn main(spawner: Spawner) {
     let mut tx_buffer = [0; 4096];
 
     let mut udp_socket = UdpSocket::new(
-        udp_stack,
+        network_stack,
         &mut rx_meta,
         &mut rx_buffer,
         &mut tx_meta,
@@ -163,20 +179,144 @@ async fn main(spawner: Spawner) {
 
     let context = NtpContext::new(crate::ntp::Timestamp::default());
 
-    let ntp_addrs = {
-        let addrs = udp_stack
+    let mut rx_buffer = [0; 4096];
+    let mut tx_buffer = [0; 4096];
+
+    let mut tcp_socket = TcpSocket::new(network_stack, &mut rx_buffer, &mut tx_buffer);
+    tcp_socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
+
+    let ntp_addrs = async {
+        let addrs = network_stack
             .dns_query(NTP_SERVER, DnsQueryType::A)
             .await
-            .expect("Failed to resolve DNS");
+            .map_err(|error| {
+                defmt::error!("Failed to run DNS query for {}: {:?}", NTP_SERVER, error);
+            })?;
 
         if addrs.is_empty() {
-            defmt::error!("Failed to resolve DNS: NTP_SERVER = {}", NTP_SERVER);
+            defmt::error!("Failed to resolve DNS {}", NTP_SERVER);
+            return Err(());
+        }
+
+        Ok(addrs)
+    };
+
+    let mqtt_addrs = async {
+        let addrs = network_stack
+            .dns_query(MQTT_BROKER_ADDR, DnsQueryType::A)
+            .await
+            .map_err(|error| {
+                defmt::error!(
+                    "Failed to run DNS query for {}: {:?}",
+                    MQTT_BROKER_ADDR,
+                    error
+                );
+            })?;
+
+        if addrs.is_empty() {
+            defmt::error!("Failed to resolve DNS {}", MQTT_BROKER_ADDR);
+            return Err(());
+        }
+        Ok(addrs)
+    };
+
+    let (ntp_addrs, mqtt_addrs) = match embassy_futures::join::join(ntp_addrs, mqtt_addrs).await {
+        (Err(()), _) => {
+            defmt::error!("Failed to resolve NTP addresses");
             return;
         }
-        addrs
+        (_, Err(())) => {
+            defmt::error!("Failed to resolve MQTT addresses");
+            return;
+        }
+        (Ok(ntp), Ok(mqtt)) => (ntp, mqtt),
+    };
+
+    let _connection = {
+        let mqtt_addr = mqtt_addrs[0];
+        defmt::info!(
+            "connecting to MQTT Broker: {}:{}",
+            mqtt_addr,
+            MQTT_BROKER_PORT
+        );
+        match tcp_socket.connect((mqtt_addr, MQTT_BROKER_PORT)).await {
+            Err(e) => {
+                defmt::error!("Failed to connect to MQTT Broker: {:?}", e);
+                return;
+            }
+            Ok(conn) => {
+                defmt::info!("Connected to MQTT broker!");
+                conn
+            }
+        }
+    };
+
+    let mut mqtt_recv_buffer = [0; 80];
+    let mut mqtt_write_buffer = [0; 80];
+    let mut mqtt_client = {
+        let mut config = rust_mqtt::client::client_config::ClientConfig::new(
+            rust_mqtt::client::client_config::MqttVersion::MQTTv5,
+            rust_mqtt::utils::rng_generator::CountingRng(20000),
+        );
+        config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
+        config.add_client_id(MQTT_CLIENT_ID);
+        config.max_packet_size = 100;
+
+        defmt::info!("Connecting to MQTT as {}", MQTT_USER);
+        // config.add_username(MQTT_USER);
+        // config.add_password(MQTT_PASSWORD);
+
+        defmt::info!("Installing WILL message on {}", MQTT_TOPIC_DEVICE_STATE);
+        config.add_will(MQTT_TOPIC_DEVICE_STATE, "disconnected".as_bytes(), false);
+
+        let mut client = rust_mqtt::client::client::MqttClient::<_, 5, _>::new(
+            tcp_socket,
+            &mut mqtt_write_buffer,
+            80,
+            &mut mqtt_recv_buffer,
+            80,
+            config,
+        );
+
+        match client.connect_to_broker().await {
+            Ok(()) => {}
+            Err(mqtt_error) => match mqtt_error {
+                rust_mqtt::packet::v5::reason_codes::ReasonCode::NetworkError => {
+                    defmt::error!("MQTT Network Error");
+                    return;
+                }
+                _ => {
+                    defmt::error!("Other MQTT Error: {:?}", mqtt_error);
+                    return;
+                }
+            },
+        }
+
+        client
     };
 
     defmt::info!("Starting");
+
+    if let Err(mqtt_error) = mqtt_client
+        .send_message(
+            MQTT_TOPIC_DEVICE_STATE,
+            "booting".as_bytes(),
+            rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1,
+            false, // do not retain
+        )
+        .await
+    {
+        match mqtt_error {
+            rust_mqtt::packet::v5::reason_codes::ReasonCode::NetworkError => {
+                defmt::error!("MQTT Network Error");
+                return;
+            }
+            _ => {
+                defmt::error!("Other MQTT Error: {:?}", mqtt_error);
+                return;
+            }
+        }
+    }
 
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm1, p.DMA_CH0, p.PIN_16, &program);
