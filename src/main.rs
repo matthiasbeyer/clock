@@ -30,6 +30,7 @@ mod mapping;
 mod mqtt;
 mod ntp;
 mod output;
+mod program;
 mod render;
 mod util;
 
@@ -203,27 +204,34 @@ async fn main(spawner: Spawner) {
             }
         }
     };
-    let last_clock_update = embassy_time::Instant::now();
+    let mut last_clock_update = embassy_time::Instant::now();
+    let mut last_mqtt_update = embassy_time::Instant::now();
 
     let mut color_iter = crate::color::ColorIter::new(10, embassy_time::Duration::from_secs(1));
 
     let mut color = color_iter.next().unwrap();
     let mut clock = crate::clock::Clock::new(ntp_result, last_clock_update);
     let mut border = crate::bounding_box::BoundingBox::new();
-
-    let mut timezone_offset = None;
+    let current_program: Option<program::ProgramId> = None;
 
     loop {
         let cycle_start_time = embassy_time::Instant::now();
 
-        match mqtt_client
-            .next_payload()
-            .with_timeout(embassy_time::Duration::from_millis(100))
-            .await
-        {
-            Err(_timeout) => { /* do nothing */ }
-            Ok(Err(mqtt_error)) => defmt::error!("MQTT Error: {:?}", mqtt_error),
-            Ok(Ok(payload)) => handle_next_mqtt_payload(payload, &mut timezone_offset),
+        if cycle_start_time.duration_since(last_mqtt_update) > Duration::from_secs(1) {
+            match mqtt_client
+                .next_payload()
+                .with_timeout(embassy_time::Duration::from_secs(1))
+                .await
+            {
+                Err(_timeout) => {
+                    defmt::debug!("Ignoring MQTT recv timeout");
+                }
+                Ok(Err(mqtt_error)) => defmt::error!("MQTT Error: {:?}", mqtt_error),
+                Ok(Ok(payload)) => {
+                    handle_next_mqtt_payload(payload, &mut clock);
+                    last_mqtt_update = embassy_time::Instant::now();
+                },
+            }
         }
 
         if cycle_start_time.duration_since(last_clock_update) > Duration::from_secs(60) {
@@ -238,10 +246,17 @@ async fn main(spawner: Spawner) {
                     defmt::error!("Error getting time: {:?}", e);
                 }
             }
+            last_clock_update = embassy_time::Instant::now();
         }
 
         if color_iter.needs_cycle() {
             color = color_iter.next().unwrap();
+        }
+
+        if let Some(program_id) = current_program.as_ref() {
+            let _ = mqtt_client.current_program(program_id.name()).await;
+        } else {
+            let _ = mqtt_client.current_program("clock").await;
         }
 
         defmt::debug!("Rendering");
@@ -265,13 +280,15 @@ async fn main(spawner: Spawner) {
             if let Some(sleep_time) =
                 sleep_until.checked_duration_since(embassy_time::Instant::now())
             {
+                defmt::debug!("Sleeping for {}", sleep_time);
                 embassy_time::Timer::after(sleep_time).await
             }
         }
     }
 }
 
-fn handle_next_mqtt_payload(payload: mqtt::MqttPayload, timezone_offset: &mut Option<Duration>) {
+fn handle_next_mqtt_payload(payload: mqtt::MqttPayload, clock: &mut crate::clock::Clock) {
+    defmt::info!("Handling MQTT payload");
     match payload {
         mqtt::MqttPayload::Timezone(pl) => {
             let s = match core::str::from_utf8(pl) {
@@ -283,7 +300,7 @@ fn handle_next_mqtt_payload(payload: mqtt::MqttPayload, timezone_offset: &mut Op
             };
 
             match s.parse::<u64>() {
-                Ok(secs) => *timezone_offset = Some(Duration::from_secs(secs)),
+                Ok(secs) => clock.set_timezone_offset(Duration::from_secs(secs)),
                 Err(_) => defmt::warn!("Failed to parse {} as u64", pl),
             };
         }

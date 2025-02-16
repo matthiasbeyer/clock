@@ -8,6 +8,7 @@ pub struct Clock {
     ntp: NtpResult,
     last_ntp: Instant,
     is_first_run: bool,
+    timezone_offset: Duration,
 }
 
 impl Clock {
@@ -16,12 +17,17 @@ impl Clock {
             ntp,
             last_ntp,
             is_first_run: true,
+            timezone_offset: Duration::from_secs(0),
         }
     }
 
     pub fn set_system_time(&mut self, ntp: sntpc::NtpResult, last_ntp: Instant) {
         self.ntp = ntp;
         self.last_ntp = last_ntp;
+    }
+
+    pub fn set_timezone_offset(&mut self, offset: Duration) {
+        self.timezone_offset = offset;
     }
 }
 
@@ -48,6 +54,8 @@ impl crate::render::RenderToDisplay for Clock {
         let time_text = {
             let current_time = Duration::from_secs(self.ntp.sec().into())
                 .checked_add(Instant::now().duration_since(self.last_ntp))
+                .unwrap()
+                .checked_add(self.timezone_offset)
                 .unwrap();
 
             let current_time_secs = current_time.as_secs();

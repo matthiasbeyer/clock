@@ -4,6 +4,7 @@ use embassy_net::tcp::TcpSocket;
 use crate::MQTT_BROKER_ADDR;
 use crate::MQTT_BROKER_PORT;
 use crate::MQTT_CLIENT_ID;
+use crate::MQTT_TOPIC_CURRENT_PROGRAM;
 use crate::MQTT_TOPIC_DEVICE_STATE;
 use crate::MQTT_USER;
 
@@ -122,7 +123,7 @@ impl<'network> MqttClient<'network> {
             rust_mqtt::client::client_config::MqttVersion::MQTTv5,
             rust_mqtt::utils::rng_generator::CountingRng(20000),
         );
-        config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1);
+        config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0);
         config.add_client_id(MQTT_CLIENT_ID);
         config.max_packet_size = 100;
 
@@ -185,7 +186,7 @@ impl<'network> MqttClient<'network> {
             .send_message(
                 MQTT_TOPIC_DEVICE_STATE,
                 "booting".as_bytes(),
-                rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS1,
+                rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
                 false, // do not retain
             )
             .await
@@ -202,6 +203,34 @@ impl<'network> MqttClient<'network> {
             }
             Ok(_) => {
                 defmt::info!("'booting' message sent successfully");
+                Ok(())
+            }
+        }
+    }
+
+    pub async fn current_program(&mut self, program_name: &str) -> Result<(), MqttClientError> {
+        match self
+            .client
+            .send_message(
+                MQTT_TOPIC_CURRENT_PROGRAM,
+                program_name.as_bytes(),
+                rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
+                true, // do retain
+            )
+            .await
+        {
+            Err(rust_mqtt::packet::v5::reason_codes::ReasonCode::NetworkError) => {
+                defmt::error!("MQTT Network Error");
+                Err(MqttClientError::MqttClient(
+                    rust_mqtt::packet::v5::reason_codes::ReasonCode::NetworkError,
+                ))
+            }
+            Err(error) => {
+                defmt::error!("Other MQTT Error: {:?}", error);
+                Err(MqttClientError::MqttError(error))
+            }
+            Ok(_) => {
+                defmt::info!("'current_program' message sent successfully");
                 Ok(())
             }
         }
