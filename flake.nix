@@ -76,6 +76,14 @@
           CYW43_FIRMWARE_BIN = "${inputs.embassy}/cyw43-firmware/43439A0.bin";
           CYW43_FIRMWARE_CLM_BIN = "${inputs.embassy}/cyw43-firmware/43439A0_clm.bin";
 
+          shellHook = ''
+            # This sets the environment variables required for the project
+            source env.sh
+
+            # This sources the private env for this project, if the file exists.
+            [ -e env.private.sh ] && source env.private.sh
+          '';
+
           nativeBuildInputs = [
             rustfmt'
             rustTarget

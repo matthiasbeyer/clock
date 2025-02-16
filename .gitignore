@@ -1,2 +1,5 @@
 /target
 /result*
+
+# Private environment variables in here:
+/env.private.sh
