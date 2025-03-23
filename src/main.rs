@@ -180,9 +180,12 @@ async fn main(spawner: Spawner) {
             .await
             .unwrap();
 
-    let mut mqtt_client = crate::mqtt::MqttClient::new(network_stack, &mut mqtt_stack_resources)
-        .await
-        .unwrap();
+    let keep_aliver = crate::mqtt::MqttKeepAliver::new(Duration::from_secs(15));
+
+    let mut mqtt_client =
+        crate::mqtt::MqttClient::new(network_stack, &mut mqtt_stack_resources, &keep_aliver)
+            .await
+            .unwrap();
     defmt::info!("NTP, MQTT setup done!");
 
     defmt::info!("Starting");
@@ -217,6 +220,7 @@ async fn main(spawner: Spawner) {
     let _current_program: Option<program::ProgramId> = None;
 
     let _ = mqtt_client.current_program("clock").await;
+    let mut keep_aliver = keep_aliver;
 
     loop {
         let cycle_start_time = embassy_time::Instant::now();
@@ -239,6 +243,14 @@ async fn main(spawner: Spawner) {
             }
 
             last_mqtt_update = embassy_time::Instant::now();
+            keep_aliver.update_to_now();
+        }
+
+        if keep_aliver.needs_cycle() {
+            if let Err(error) = mqtt_client.ping().await {
+                defmt::error!("Failed to PING: {:?}", defmt::Debug2Format(&error));
+            }
+            keep_aliver.update_to_now();
         }
 
         if cycle_start_time.duration_since(last_clock_update) > Duration::from_secs(60) {
@@ -270,6 +282,7 @@ async fn main(spawner: Spawner) {
         let min_cycle_duration = [
             color_provider.get_next_cycle_time(),
             clock.get_next_cycle_time(),
+            keep_aliver.get_next_cycle_time(),
         ]
         .into_iter()
         .min()
