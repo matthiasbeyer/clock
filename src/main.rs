@@ -208,9 +208,10 @@ async fn main(spawner: Spawner) {
     let mut last_clock_update = embassy_time::Instant::now();
     let mut last_mqtt_update = embassy_time::Instant::now();
 
-    let mut color_iter = crate::color::ColorIter::new(10, embassy_time::Duration::from_secs(1));
+    let color_iter = crate::color::ColorIter::new(10, embassy_time::Duration::from_secs(1));
+    let mut color_provider = crate::color::ColorProvider::new(color_iter);
 
-    let mut color = color_iter.next().unwrap();
+    let mut color = color_provider.next().unwrap();
     let mut clock = crate::clock::Clock::new(ntp_result, last_clock_update);
     let mut border = crate::bounding_box::BoundingBox::new();
     let current_program: Option<program::ProgramId> = None;
@@ -229,9 +230,9 @@ async fn main(spawner: Spawner) {
                 }
                 Ok(Err(mqtt_error)) => defmt::error!("MQTT Error: {:?}", mqtt_error),
                 Ok(Ok(payload)) => {
-                    handle_next_mqtt_payload(payload, &mut clock);
+                    handle_next_mqtt_payload(payload, &mut clock, &mut color_provider);
                     last_mqtt_update = embassy_time::Instant::now();
-                },
+                }
             }
         }
 
@@ -250,8 +251,8 @@ async fn main(spawner: Spawner) {
             last_clock_update = embassy_time::Instant::now();
         }
 
-        if color_iter.needs_cycle() {
-            color = color_iter.next().unwrap();
+        if color_provider.needs_cycle() {
+            color = color_provider.next().unwrap();
         }
 
         if let Some(program_id) = current_program.as_ref() {
@@ -268,7 +269,7 @@ async fn main(spawner: Spawner) {
         defmt::debug!("Rendering done");
 
         let min_cycle_duration = [
-            color_iter.get_next_cycle_time(),
+            color_provider.get_next_cycle_time(),
             clock.get_next_cycle_time(),
         ]
         .into_iter()
@@ -288,7 +289,11 @@ async fn main(spawner: Spawner) {
     }
 }
 
-fn handle_next_mqtt_payload(payload: mqtt::MqttPayload, clock: &mut crate::clock::Clock) {
+fn handle_next_mqtt_payload(
+    payload: mqtt::MqttPayload,
+    clock: &mut crate::clock::Clock,
+    color_provider: &mut color::ColorProvider,
+) {
     defmt::info!("Handling MQTT payload");
     match payload {
         mqtt::MqttPayload::Timezone(pl) => {
@@ -308,6 +313,30 @@ fn handle_next_mqtt_payload(payload: mqtt::MqttPayload, clock: &mut crate::clock
 
         mqtt::MqttPayload::StartProgram(pl) => {
             todo!()
+        }
+
+        mqtt::MqttPayload::SetColor(pl) => {
+            #[derive(serde::Deserialize)]
+            struct SetColorPayload {
+                color: [u8; 3],
+                duration_secs: u64,
+            }
+
+            match serde_json_core::from_slice::<SetColorPayload>(pl) {
+                Ok((pl, n_bytes)) => {
+                    defmt::debug!("Deserialized SetColorPayload, consumed {} bytes", n_bytes);
+                    color_provider.set_color_for(
+                        pl.color,
+                        embassy_time::Duration::from_secs(pl.duration_secs),
+                    );
+                }
+                Err(error) => {
+                    defmt::warn!(
+                        "Failed to deserialize SetColorPayload: {:?}",
+                        defmt::Debug2Format(&error)
+                    );
+                }
+            }
         }
 
         mqtt::MqttPayload::Unknown { topic, payload } => {
