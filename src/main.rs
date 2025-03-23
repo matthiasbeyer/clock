@@ -214,7 +214,9 @@ async fn main(spawner: Spawner) {
     let mut color = color_provider.next().unwrap();
     let mut clock = crate::clock::Clock::new(ntp_result, last_clock_update);
     let mut border = crate::bounding_box::BoundingBox::new();
-    let current_program: Option<program::ProgramId> = None;
+    let _current_program: Option<program::ProgramId> = None;
+
+    let _ = mqtt_client.current_program("clock").await;
 
     loop {
         let cycle_start_time = embassy_time::Instant::now();
@@ -253,12 +255,6 @@ async fn main(spawner: Spawner) {
 
         if color_provider.needs_cycle() {
             color = color_provider.next().unwrap();
-        }
-
-        if let Some(program_id) = current_program.as_ref() {
-            let _ = mqtt_client.current_program(program_id.name()).await;
-        } else {
-            let _ = mqtt_client.current_program("clock").await;
         }
 
         defmt::debug!("Rendering");
