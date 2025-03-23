@@ -60,6 +60,7 @@ macro_rules! topic {
 const MQTT_TOPIC_CURRENT_PROGRAM: &str = topic!(state: "current_program");
 const MQTT_TOPIC_START_PROGRAM: &str = topic!(command: "start_program");
 const MQTT_TOPIC_TIMEZONE_OFFSET: &str = topic!(command: "timezone_offset");
+const MQTT_TOPIC_SET_COLOR: &str = topic!(command: "set_color");
 
 const WIFI_NETWORK: &str = env!("WIFI_NETWORK");
 const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");

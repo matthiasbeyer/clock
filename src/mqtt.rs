@@ -245,6 +245,7 @@ impl<'network> MqttClient<'network> {
         {
             (crate::MQTT_TOPIC_TIMEZONE_OFFSET, payload) => Ok(MqttPayload::Timezone(payload)),
             (crate::MQTT_TOPIC_START_PROGRAM, payload) => Ok(MqttPayload::StartProgram(payload)),
+            (crate::MQTT_TOPIC_SET_COLOR, payload) => Ok(MqttPayload::SetColor(payload)),
             (topic, payload) => Ok(MqttPayload::Unknown { topic, payload }),
         }
     }
@@ -252,6 +253,10 @@ impl<'network> MqttClient<'network> {
 
 pub enum MqttPayload<'p> {
     Timezone(&'p [u8]),
+    SetColor(&'p [u8]),
     StartProgram(&'p [u8]),
-    Unknown { topic: &'p str, payload: &'p [u8] },
+    Unknown {
+        topic: &'p str,
+        payload: &'p [u8],
+    },
 }
