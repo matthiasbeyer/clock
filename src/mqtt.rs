@@ -114,7 +114,12 @@ impl<'network> MqttClient<'network> {
         );
 
         if let Err(error) = tcp_socket.connect((mqtt_addr, MQTT_BROKER_PORT)).await {
-            defmt::error!("Failed to connect to MQTT Broker: {:?}", error);
+            defmt::error!(
+                "Failed to connect to MQTT Broker ({}:{}): {:?}",
+                mqtt_addr,
+                MQTT_BROKER_PORT,
+                error
+            );
             return Err(MqttClientError::Connect(error));
         }
         defmt::info!("Connected to MQTT broker!");
@@ -255,8 +260,5 @@ pub enum MqttPayload<'p> {
     Timezone(&'p [u8]),
     SetColor(&'p [u8]),
     StartProgram(&'p [u8]),
-    Unknown {
-        topic: &'p str,
-        payload: &'p [u8],
-    },
+    Unknown { topic: &'p str, payload: &'p [u8] },
 }

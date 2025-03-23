@@ -221,7 +221,9 @@ async fn main(spawner: Spawner) {
     loop {
         let cycle_start_time = embassy_time::Instant::now();
 
+        defmt::debug!("Last mqtt update fetched: {}", last_mqtt_update);
         if cycle_start_time.duration_since(last_mqtt_update) > Duration::from_secs(1) {
+            defmt::debug!("Fetching MQTT updates");
             match mqtt_client
                 .next_payload()
                 .with_timeout(embassy_time::Duration::from_secs(1))
@@ -270,11 +272,16 @@ async fn main(spawner: Spawner) {
         ]
         .into_iter()
         .min()
-        .unwrap_or_else(embassy_time::Instant::now);
+        .unwrap_or_else(|| {
+            defmt::debug!("Using now()!");
+            embassy_time::Instant::now()
+        });
 
         let cycle_duration = embassy_time::Instant::now().duration_since(cycle_start_time);
 
+        defmt::debug!("cycle duration = {}", cycle_duration);
         if let Some(sleep_until) = min_cycle_duration.checked_sub(cycle_duration) {
+            defmt::debug!("sleep until = {}", sleep_until);
             if let Some(sleep_time) =
                 sleep_until.checked_duration_since(embassy_time::Instant::now())
             {
