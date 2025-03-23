@@ -235,9 +235,10 @@ async fn main(spawner: Spawner) {
                 Ok(Err(mqtt_error)) => defmt::error!("MQTT Error: {:?}", mqtt_error),
                 Ok(Ok(payload)) => {
                     handle_next_mqtt_payload(payload, &mut clock, &mut color_provider);
-                    last_mqtt_update = embassy_time::Instant::now();
                 }
             }
+
+            last_mqtt_update = embassy_time::Instant::now();
         }
 
         if cycle_start_time.duration_since(last_clock_update) > Duration::from_secs(60) {
