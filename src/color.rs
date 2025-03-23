@@ -1,5 +1,80 @@
 use embedded_graphics::pixelcolor::Rgb888;
 
+pub struct ColorProvider {
+    iter: ColorIter,
+    set_color: Option<SetColor>,
+    last_cycle_time: embassy_time::Instant,
+}
+
+struct SetColor {
+    set_time: embassy_time::Instant,
+    color: [u8; 3],
+    duration: embassy_time::Duration,
+}
+
+impl ColorProvider {
+    pub fn new(iter: ColorIter) -> Self {
+        Self {
+            iter,
+            set_color: None,
+            last_cycle_time: embassy_time::Instant::now(),
+        }
+    }
+
+    pub fn set_color_for(&mut self, color: [u8; 3], duration: embassy_time::Duration) {
+        self.set_color = Some(SetColor {
+            set_time: embassy_time::Instant::now(),
+            color,
+            duration,
+        });
+    }
+}
+
+impl core::iter::Iterator for ColorProvider {
+    type Item = Rgb888;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.last_cycle_time = embassy_time::Instant::now();
+
+        if let Some(set_color) = self.set_color.as_ref() {
+            if set_color.set_time.elapsed() > set_color.duration {
+                self.set_color = None;
+            }
+        }
+
+        if let Some(set_color) = self.set_color.as_ref() {
+            return Some(Rgb888::new(
+                set_color.color[0],
+                set_color.color[1],
+                set_color.color[2],
+            ));
+        }
+
+        self.iter.next()
+    }
+}
+
+impl crate::render::Renderable for ColorProvider {
+    fn get_next_cycle_time(&self) -> embassy_time::Instant {
+        let next_iter_cycle_time = self.iter.get_next_cycle_time();
+
+        if let Some(set_color_dur) = self.set_color.as_ref() {
+            let next_set_color_cycle_time = set_color_dur.set_time + set_color_dur.duration;
+            return next_iter_cycle_time.min(next_set_color_cycle_time)
+        }
+
+        next_iter_cycle_time
+    }
+
+    fn needs_cycle(&self) -> bool {
+        if let Some(set_color) = self.set_color.as_ref() {
+            return self.last_cycle_time.elapsed() > set_color.duration;
+        }
+
+        self.iter.needs_cycle()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ColorIter {
     rgb: [u8; 3],
