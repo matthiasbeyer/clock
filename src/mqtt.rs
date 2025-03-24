@@ -88,6 +88,7 @@ impl<'network> MqttClient<'network> {
             &mut mqtt_stack_resources.tx_buffer,
         );
         tcp_socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
+        tcp_socket.set_keep_alive(Some(embassy_time::Duration::from_secs(5)));
 
         let addrs = network_stack
             .dns_query(MQTT_BROKER_ADDR, DnsQueryType::A)
