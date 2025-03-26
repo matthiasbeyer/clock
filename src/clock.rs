@@ -67,19 +67,8 @@ impl crate::render::RenderToDisplay for Clock {
             crate::stackstr!(5, "{:02}:{:02}", curr_hour, curr_min)
         };
 
-        let character_style = embedded_graphics::mono_font::MonoTextStyle::new(
-            &embedded_graphics::mono_font::ascii::FONT_5X8,
-            color,
-        );
-
-        embedded_graphics::text::Text::with_alignment(
-            time_text.as_str(),
-            display.bounding_box().center() + embedded_graphics::prelude::Point::new(0, 3),
-            character_style,
-            embedded_graphics::text::Alignment::Center,
-        )
-        .draw(display)
-        .unwrap();
+        let mut text = crate::text::Text::new(time_text.as_str());
+        text.render_to_display(display, color);
     }
 }
 
