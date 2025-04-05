@@ -8,6 +8,14 @@ use crate::MQTT_TOPIC_CURRENT_PROGRAM;
 use crate::MQTT_TOPIC_DEVICE_STATE;
 use crate::MQTT_USER;
 
+mod error;
+mod keep_alive;
+mod stack;
+
+pub use self::error::MqttClientError;
+pub use self::keep_alive::MqttKeepAliver;
+pub use self::stack::MqttStackResources;
+
 pub struct MqttClient<'network> {
     client: rust_mqtt::client::client::MqttClient<
         'network,
@@ -15,65 +23,6 @@ pub struct MqttClient<'network> {
         5,
         rust_mqtt::utils::rng_generator::CountingRng,
     >,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum MqttClientError {
-    #[error("Failed to run DNS query for '{}'", MQTT_BROKER_ADDR)]
-    RunDns(embassy_net::dns::Error),
-
-    #[error("Failed to resolve DNS for NTP server '{}'", MQTT_BROKER_ADDR)]
-    ResolveDns,
-
-    #[error("Failed to connect socket for MQTT client: {:?}", .0)]
-    Connect(embassy_net::tcp::ConnectError),
-
-    #[error("MQTT Client Network error: {:?}", .0)]
-    MqttClient(rust_mqtt::packet::v5::reason_codes::ReasonCode),
-
-    #[error("MQTT Client error: {:?}", .0)]
-    MqttError(rust_mqtt::packet::v5::reason_codes::ReasonCode),
-
-    #[error("MQTT Client PING failed: {:?}", .0)]
-    Ping(rust_mqtt::packet::v5::reason_codes::ReasonCode),
-
-    #[error("MQTT Client Receive failed: {:?}", .0)]
-    Recv(rust_mqtt::packet::v5::reason_codes::ReasonCode),
-
-    #[error("Subscribing to topic '{}' failed: {:?}", .0, .1)]
-    Subscribing(
-        &'static str,
-        rust_mqtt::packet::v5::reason_codes::ReasonCode,
-    ),
-}
-
-impl defmt::Format for MqttClientError {
-    fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "MqttClientError: {}", self)
-    }
-}
-
-const MQTT_RECV_BUFFER_LEN: usize = 80;
-const MQTT_WRITE_BUFFER_LEN: usize = 80;
-
-pub struct MqttStackResources {
-    rx_buffer: [u8; 4096],
-    tx_buffer: [u8; 4096],
-
-    mqtt_recv_buffer: [u8; MQTT_RECV_BUFFER_LEN],
-    mqtt_write_buffer: [u8; MQTT_WRITE_BUFFER_LEN],
-}
-
-impl Default for MqttStackResources {
-    fn default() -> Self {
-        Self {
-            rx_buffer: [0; 4096],
-            tx_buffer: [0; 4096],
-
-            mqtt_recv_buffer: [0; 80],
-            mqtt_write_buffer: [0; 80],
-        }
-    }
 }
 
 impl<'network> MqttClient<'network> {
@@ -266,36 +215,3 @@ pub enum MqttPayload<'p> {
     Unknown { topic: &'p str, payload: &'p [u8] },
 }
 
-pub struct MqttKeepAliver {
-    last_keep_alive: embassy_time::Instant,
-    keep_alive: embassy_time::Duration,
-}
-
-impl MqttKeepAliver {
-    pub fn new(keep_alive: embassy_time::Duration) -> Self {
-        Self {
-            last_keep_alive: embassy_time::Instant::now(),
-            keep_alive,
-        }
-    }
-
-    pub fn as_secs(&self) -> u16 {
-        self.keep_alive.as_secs() as u16
-    }
-
-    pub fn update_to_now(&mut self) {
-        self.last_keep_alive = embassy_time::Instant::now();
-    }
-}
-
-impl crate::render::Renderable for MqttKeepAliver {
-    fn get_next_cycle_time(&self) -> embassy_time::Instant {
-        self.last_keep_alive
-            .checked_add(self.keep_alive / 2)
-            .unwrap_or_else(embassy_time::Instant::now)
-    }
-
-    fn needs_cycle(&self) -> bool {
-        self.last_keep_alive.elapsed() > (self.keep_alive / 2)
-    }
-}
