@@ -207,6 +207,7 @@ dependencies = [
  "embedded-storage",
  "heapless 0.8.0",
  "log",
+ "mqtt-format",
  "panic-probe",
  "pio 0.2.1 (git+https://github.com/rp-rs/pio-rs?rev=fa586448b0b223217eec8c92c19fe6823dd04cc4)",
  "pio-proc 0.2.2 (git+https://github.com/rp-rs/pio-rs?rev=fa586448b0b223217eec8c92c19fe6823dd04cc4)",

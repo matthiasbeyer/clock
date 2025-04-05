@@ -220,19 +220,7 @@ async fn main(spawner: Spawner) {
 
     let keep_aliver = crate::mqtt::MqttKeepAliver::new(Duration::from_secs(15));
 
-    let Ok(mut mqtt_client) =
-        crate::mqtt::MqttClient::new(network_stack, &mut mqtt_stack_resources, &keep_aliver).await
-    else {
-        crate::text::render_text_to_leds("MQTT", RED, &mut leds).await;
-        loop {
-            Timer::after_secs(1).await;
-        }
-    };
-    defmt::info!("NTP, MQTT setup done!");
-
     defmt::info!("Starting");
-
-    mqtt_client.booting().await.unwrap();
 
     let result = ntp_client.get_time(&udp_socket).await;
     let ntp_result = match result {
@@ -248,14 +236,34 @@ async fn main(spawner: Spawner) {
             }
         }
     };
+
     let mut last_clock_update = embassy_time::Instant::now();
+    let mut clock = crate::clock::Clock::new(ntp_result, last_clock_update);
+
+    let Ok(mut mqtt_client) = crate::mqtt::MqttClient::new(
+        &clock,
+        network_stack,
+        &mut mqtt_stack_resources,
+        &keep_aliver,
+    )
+    .await
+    else {
+        crate::text::render_text_to_leds("MQTT", RED, &mut leds).await;
+        loop {
+            Timer::after_secs(1).await;
+        }
+    };
+
+    mqtt_client.booting().await.unwrap();
+
+    defmt::info!("NTP, MQTT setup done!");
     let mut last_mqtt_update = embassy_time::Instant::now();
 
     let color_iter = crate::color::ColorIter::new(10, embassy_time::Duration::from_secs(1));
     let mut color_provider = crate::color::ColorProvider::new(color_iter);
 
     let mut color = color_provider.next().unwrap();
-    let mut clock = crate::clock::Clock::new(ntp_result, last_clock_update);
+
     let mut border = crate::bounding_box::BoundingBox::new();
     let _current_program: Option<program::ProgramId> = None;
 
