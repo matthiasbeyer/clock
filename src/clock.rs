@@ -29,6 +29,16 @@ impl Clock {
     pub fn set_timezone_offset(&mut self, offset: Duration) {
         self.timezone_offset = offset;
     }
+
+    pub fn get_current_time(&self) -> Duration {
+        let current_time = Duration::from_secs(self.ntp.sec().into())
+            .checked_add(Instant::now().duration_since(self.last_ntp))
+            .unwrap()
+            .checked_add(self.timezone_offset)
+            .unwrap();
+
+        current_time
+    }
 }
 
 impl crate::render::Renderable for Clock {
@@ -52,11 +62,7 @@ impl crate::render::RenderToDisplay for Clock {
         self.is_first_run = false;
         // Draw centered text.
         let time_text = {
-            let current_time = Duration::from_secs(self.ntp.sec().into())
-                .checked_add(Instant::now().duration_since(self.last_ntp))
-                .unwrap()
-                .checked_add(self.timezone_offset)
-                .unwrap();
+            let current_time = self.get_current_time();
 
             let current_time_secs = current_time.as_secs();
             let seconds_today = current_time_secs % (60 * 60 * 24);
