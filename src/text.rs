@@ -42,7 +42,7 @@ pub async fn render_text_to_leds<P, const S: usize>(
 ) where
     P: embassy_rp::pio::Instance,
 {
-    defmt::debug!("Rendering text to leds");
+    defmt::debug!("Rendering text '{}' to leds", text);
     let mut display = crate::output::OutputBuffer::new();
     let mut text = crate::text::Text::new(text);
     text.render_to_display(&mut display, color);

@@ -253,6 +253,7 @@ async fn main(spawner: Spawner) {
             mqtt_client
         },
         Err(error) => {
+            defmt::error!("MQTT Setup error: {}", error);
             crate::text::render_text_to_leds("MQTT", RED, &mut leds).await;
             loop {
                 defmt::error!("MQTT Setup error: {}", error);

@@ -101,6 +101,7 @@ impl<'network> MqttClient<'network> {
         defmt::info!("Connecting to MQTT as {}", crate::MQTT_USER);
 
         let Some(next_action) = fsm.run(current_time(clock)) else {
+            defmt::error!("MQTT Setup error: FSM returned that no action is required");
             return Err(MqttClientError::FsmUnexpectedNoAction);
         };
 
