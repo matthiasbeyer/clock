@@ -261,7 +261,7 @@ async fn main(spawner: Spawner) {
         }
     };
 
-    mqtt_client.booting().await.unwrap();
+    mqtt_client.booting(&clock).await.unwrap();
 
     defmt::info!("NTP, MQTT setup done!");
     let mut last_mqtt_update = embassy_time::Instant::now();
@@ -273,7 +273,7 @@ async fn main(spawner: Spawner) {
 
     let mut border = crate::bounding_box::BoundingBox::new();
 
-    let _ = mqtt_client.current_program("clock").await;
+    let _ = mqtt_client.current_program(&clock, "clock").await;
     let mut keep_aliver = keep_aliver;
 
     crate::text::render_text_to_leds("Booted", GREEN, &mut leds).await;
@@ -286,7 +286,7 @@ async fn main(spawner: Spawner) {
         if cycle_start_time.duration_since(last_mqtt_update) > Duration::from_secs(1) {
             defmt::debug!("Fetching MQTT updates");
             match mqtt_client
-                .next_payload()
+                .next_payload(&clock)
                 .with_timeout(embassy_time::Duration::from_secs(1))
                 .await
             {
@@ -294,8 +294,12 @@ async fn main(spawner: Spawner) {
                     defmt::debug!("Ignoring MQTT recv timeout");
                 }
                 Ok(Err(mqtt_error)) => defmt::error!("MQTT Error: {:?}", mqtt_error),
-                Ok(Ok(payload)) => {
+                Ok(Ok(Some(payload))) => {
+                    defmt::debug!("MQTT payload received");
                     handle_next_mqtt_payload(payload, &mut clock, &mut color_provider);
+                }
+                Ok(Ok(None)) => {
+                    defmt::debug!("No MQTT payload received");
                 }
             }
 
@@ -304,9 +308,9 @@ async fn main(spawner: Spawner) {
         }
 
         if keep_aliver.needs_cycle() {
-            if let Err(error) = mqtt_client.ping().await {
-                defmt::error!("Failed to PING: {:?}", defmt::Debug2Format(&error));
-            }
+            // if let Err(error) = mqtt_client.ping().await {
+            //     defmt::error!("Failed to PING: {:?}", defmt::Debug2Format(&error));
+            // }
             keep_aliver.update_to_now();
         }
 

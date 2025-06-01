@@ -323,20 +323,49 @@ impl<'network> MqttClient<'network> {
         }
     }
 
-    pub async fn ping(&mut self) -> Result<(), MqttClientError> {
-        todo!()
+    pub async fn booting(&mut self, clock: &crate::clock::Clock) -> Result<(), MqttClientError> {
+        self.publish(clock, crate::MQTT_TOPIC_CURRENT_PROGRAM, "booting").await
     }
 
-    pub async fn booting(&mut self) -> Result<(), MqttClientError> {
-        todo!()
+    pub async fn current_program(&mut self, clock: &crate::clock::Clock, program_name: &str) -> Result<(), MqttClientError> {
+        self.publish(clock, crate::MQTT_TOPIC_CURRENT_PROGRAM, program_name).await
     }
 
-    pub async fn current_program(&mut self, program_name: &str) -> Result<(), MqttClientError> {
-        todo!()
+    pub async fn next_payload(&mut self, clock: &crate::clock::Clock) -> Result<Option<MqttPayload>, MqttClientError> {
+        Ok(None) // TODO
     }
 
-    pub async fn next_payload(&mut self) -> Result<MqttPayload, MqttClientError> {
-        todo!()
+    async fn publish(&mut self, clock: &crate::clock::Clock, topic_name: &str, text: &str) -> Result<(), MqttClientError> {
+        let mut publisher = self
+            .fsm
+            .publish(mqtt_format::v5::packets::publish::MPublish {
+                duplicate: false,
+                quality_of_service: mqtt_format::v5::qos::QualityOfService::AtMostOnce,
+                retain: false,
+                topic_name,
+                packet_identifier: None,
+                properties: mqtt_format::v5::packets::publish::PublishProperties::new(),
+                payload: text.as_bytes(),
+            });
+
+        let action = publisher.run(current_time(clock));
+
+        match action {
+            Some(cloudmqtt_core::client::ExpectedAction::SendPacket(mqtt_packet)) => {
+                if let Err(error) =
+                    util::write_mqtt_packet_to_socket(mqtt_packet, &mut self.socket).await
+                {
+                    defmt::error!("TCP Error {:?}", defmt::Debug2Format(&error));
+                    return Err(MqttClientError::TCP);
+                } else {
+                    Ok(())
+                }
+            }
+            other => {
+                defmt::error!("Unexpected FSM action: {:?}", defmt::Debug2Format(&other));
+                Err(MqttClientError::FsmUnexpectedAction)
+            }
+        }
     }
 }
 

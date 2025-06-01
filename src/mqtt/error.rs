@@ -33,6 +33,9 @@ pub enum MqttClientError {
 
     #[error("Any subscribe failed")]
     AnySubscribeFailed,
+
+    #[error("TCP Error")]
+    TCP,
 }
 
 impl defmt::Format for MqttClientError {
