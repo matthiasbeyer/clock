@@ -31,7 +31,6 @@ mod mapping;
 mod mqtt;
 mod ntp;
 mod output;
-mod program;
 mod render;
 mod text;
 mod util;
