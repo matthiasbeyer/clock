@@ -264,7 +264,6 @@ async fn main(spawner: Spawner) {
     let mut color = color_provider.next().unwrap();
 
     let mut border = crate::bounding_box::BoundingBox::new();
-    let _current_program: Option<program::ProgramId> = None;
 
     let _ = mqtt_client.current_program("clock").await;
     let mut keep_aliver = keep_aliver;
