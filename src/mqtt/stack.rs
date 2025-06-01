@@ -5,7 +5,9 @@ pub struct MqttStackResources {
     pub rx_buffer: [u8; 4096],
     pub tx_buffer: [u8; 4096],
 
+    #[allow(unused)] // TODO
     pub mqtt_recv_buffer: [u8; MQTT_RECV_BUFFER_LEN],
+    #[allow(unused)] // TODO
     pub mqtt_write_buffer: [u8; MQTT_WRITE_BUFFER_LEN],
 }
 
