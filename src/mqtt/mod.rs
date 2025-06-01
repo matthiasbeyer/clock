@@ -168,6 +168,7 @@ impl<'network> MqttClient<'network> {
         }
 
         // here, we are connected
+        defmt::info!("MQTT connected");
 
         {
             // send out subscriptions
@@ -196,6 +197,7 @@ impl<'network> MqttClient<'network> {
                 bytes
             };
 
+            defmt::info!("Sending out MQTT subscriptions");
             fsm.subscribe(
                 current_time(clock),
                 mqtt_format::v5::packets::subscribe::MSubscribe {
@@ -211,6 +213,7 @@ impl<'network> MqttClient<'network> {
         }
 
         {
+            defmt::info!("Waiting for SUBACK");
             const SUBACK_SIZE: usize =
                 core::mem::size_of::<mqtt_format::v5::packets::suback::MSuback>();
             let mut buf = [0; SUBACK_SIZE * 2];

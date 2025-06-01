@@ -35,6 +35,8 @@ pub async fn write_mqtt_packet_to_socket<'a>(
     socket: &mut embassy_net::tcp::TcpSocket<'a>,
 ) -> Result<(), embassy_net::tcp::Error> {
     let mut buf = [0; 1024 * 2];
-    packet.write(&mut BufWrite::new(&mut buf));
+    if let Err(error) = packet.write(&mut BufWrite::new(&mut buf)) {
+        defmt::error!("Failed to write out MQTT packet: {:?}", defmt::Debug2Format(&error));
+    };
     socket.write_all(&buf).await
 }

@@ -390,7 +390,7 @@ fn handle_next_mqtt_payload(
         }
 
         mqtt::MqttPayload::StartProgram(pl) => {
-            todo!()
+            defmt::warn!("StartProgram received");
         }
 
         mqtt::MqttPayload::SetColor(pl) => {
