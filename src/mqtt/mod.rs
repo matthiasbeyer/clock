@@ -28,14 +28,6 @@ impl<'network> MqttClient<'network> {
         mqtt_stack_resources: &'network mut MqttStackResources,
         keep_aliver: &MqttKeepAliver,
     ) -> Result<MqttClient<'network>, MqttClientError> {
-        let mut socket = TcpSocket::new(
-            network_stack,
-            &mut mqtt_stack_resources.rx_buffer,
-            &mut mqtt_stack_resources.tx_buffer,
-        );
-        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
-        socket.set_keep_alive(Some(embassy_time::Duration::from_secs(5)));
-
         let addrs = network_stack
             .dns_query(crate::MQTT_BROKER_ADDR, DnsQueryType::A)
             .await
@@ -61,6 +53,13 @@ impl<'network> MqttClient<'network> {
             crate::MQTT_BROKER_PORT
         );
 
+        let mut socket = TcpSocket::new(
+            network_stack,
+            &mut mqtt_stack_resources.rx_buffer,
+            &mut mqtt_stack_resources.tx_buffer,
+        );
+        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
+        socket.set_keep_alive(Some(embassy_time::Duration::from_secs(5)));
         match socket.connect((mqtt_addr, crate::MQTT_BROKER_PORT)).await {
             Err(error) => {
                 defmt::error!(
