@@ -239,17 +239,25 @@ async fn main(spawner: Spawner) {
     let mut last_clock_update = embassy_time::Instant::now();
     let mut clock = crate::clock::Clock::new(ntp_result, last_clock_update);
 
-    let Ok(mut mqtt_client) = crate::mqtt::MqttClient::new(
+    defmt::info!("Starting to set up MQTT");
+    let mut mqtt_client = match crate::mqtt::MqttClient::new(
         &clock,
         network_stack,
         &mut mqtt_stack_resources,
         &keep_aliver,
     )
     .await
-    else {
-        crate::text::render_text_to_leds("MQTT", RED, &mut leds).await;
-        loop {
-            Timer::after_secs(1).await;
+    {
+        Ok(mqtt_client) => {
+            defmt::info!("MQTT Client up and running");
+            mqtt_client
+        },
+        Err(error) => {
+            crate::text::render_text_to_leds("MQTT", RED, &mut leds).await;
+            loop {
+                defmt::error!("MQTT Setup error: {}", error);
+                Timer::after_secs(1).await;
+            }
         }
     };
 
