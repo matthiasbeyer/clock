@@ -31,13 +31,23 @@ impl Clock {
     }
 
     pub fn get_current_time(&self) -> Duration {
-        let current_time = Duration::from_secs(self.ntp.sec().into())
+        let current_time = match Duration::from_secs(self.ntp.sec().into())
             .checked_add(Instant::now().duration_since(self.last_ntp))
-            .unwrap()
-            .checked_add(self.timezone_offset)
-            .unwrap();
+        {
+            None => {
+                defmt::error!("Error: failed to do checked-add on duration");
+                panic!("Error: failed to do checked-add on duration")
+            },
+            Some(d) => d,
+        };
 
-        current_time
+        match current_time.checked_add(self.timezone_offset) {
+            None => {
+                defmt::error!("Error: failed to do checked-add on duration");
+                panic!("Error: failed to do checked-add on duration")
+            },
+            Some(d) => d,
+        }
     }
 }
 
