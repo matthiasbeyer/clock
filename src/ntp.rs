@@ -82,7 +82,7 @@ impl NtpClient {
 
         if addrs.is_empty() {
             defmt::error!("Failed to resolve DNS {}", NTP_SERVER);
-            return Err(NtpClientError::ResolveDns)
+            return Err(NtpClientError::ResolveDns);
         }
 
         let context = NtpContext::new(crate::ntp::Timestamp::default());

@@ -60,7 +60,7 @@ impl crate::render::Renderable for ColorProvider {
 
         if let Some(set_color_dur) = self.set_color.as_ref() {
             let next_set_color_cycle_time = set_color_dur.set_time + set_color_dur.duration;
-            return next_iter_cycle_time.min(next_set_color_cycle_time)
+            return next_iter_cycle_time.min(next_set_color_cycle_time);
         }
 
         next_iter_cycle_time
