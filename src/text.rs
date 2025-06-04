@@ -49,3 +49,21 @@ pub async fn render_text_to_leds<P, const S: usize>(
     display.render_into(leds).await;
     defmt::debug!("Rendering text to leds done");
 }
+
+pub async fn info<P, const S: usize>(
+    leds: &mut embassy_rp::pio_programs::ws2812::PioWs2812<'_, P, S, { crate::konst::NUM_LEDS }>,
+    text: &str,
+) where
+    P: embassy_rp::pio::Instance,
+{
+    render_text_to_leds(text, crate::konst::YELLOW, leds).await
+}
+
+pub async fn error<P, const S: usize>(
+    leds: &mut embassy_rp::pio_programs::ws2812::PioWs2812<'_, P, S, { crate::konst::NUM_LEDS }>,
+    text: &str,
+) where
+    P: embassy_rp::pio::Instance,
+{
+    render_text_to_leds(text, crate::konst::RED, leds).await
+}

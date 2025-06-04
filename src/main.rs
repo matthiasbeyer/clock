@@ -26,12 +26,14 @@ mod color;
 mod konst;
 mod mapping;
 mod mqtt;
+mod network;
 mod ntp;
 mod output;
 mod program;
 mod render;
 mod text;
 mod util;
+mod wifi;
 
 #[embassy_executor::task]
 async fn cyw43_task(
@@ -108,55 +110,20 @@ async fn main(spawner: Spawner) {
         &mut leds,
     )
     .await;
-    loop {
-        match control
-            .join(
-                konst::WIFI_NETWORK,
-                JoinOptions::new(konst::WIFI_PASSWORD.as_bytes()),
-            )
-            .await
-        {
-            Ok(_) => break,
-            Err(err) => {
-                crate::text::render_text_to_leds("Wifi failed", konst::RED, &mut leds).await;
-                defmt::info!("join failed with status={}", err.status);
-            }
-        }
-    }
+
+    crate::wifi::connect(&mut control, &mut leds).await;
 
     // Wait for DHCP, not necessary when using static IP
     defmt::info!("waiting for DHCP...");
-    crate::text::render_text_to_leds("NET", konst::GREEN, &mut leds).await;
-    {
-        let mut tries = 0u32;
-        while !network_stack.is_config_up() {
-            Timer::after_millis(100).await;
-            tries += 1;
-            match tries {
-                0..10 => crate::text::render_text_to_leds("NET.", konst::GREEN, &mut leds).await,
-                10..20 => crate::text::render_text_to_leds("NET..", konst::YELLOW, &mut leds).await,
-                20.. => crate::text::render_text_to_leds("NET...", konst::YELLOW, &mut leds).await,
-            };
-        }
-    }
+    crate::text::render_text_to_leds("NET?", konst::GREEN, &mut leds).await;
+    crate::network::wait_until_network_config_up(&network_stack, &mut leds).await;
+    crate::text::render_text_to_leds("NET!", konst::GREEN, &mut leds).await;
     defmt::info!("DHCP is now up!");
 
     defmt::info!("waiting for link up...");
-    crate::text::render_text_to_leds("DHCP", konst::GREEN, &mut leds).await;
-    {
-        let mut tries = 0u32;
-        while !network_stack.is_link_up() {
-            Timer::after_millis(500).await;
-            tries += 1;
-            match tries {
-                0..10 => crate::text::render_text_to_leds("DHCP.", konst::GREEN, &mut leds).await,
-                10..20 => {
-                    crate::text::render_text_to_leds("DHCP..", konst::YELLOW, &mut leds).await
-                }
-                20.. => crate::text::render_text_to_leds("DHCP...", konst::YELLOW, &mut leds).await,
-            };
-        }
-    }
+    crate::text::render_text_to_leds("DHCP?", konst::GREEN, &mut leds).await;
+    crate::network::wait_until_link_up(&network_stack, &mut leds).await;
+    crate::text::render_text_to_leds("DHCP!", konst::GREEN, &mut leds).await;
     defmt::info!("Link is up!");
 
     // Wait for the tap interface to be up before continuing
@@ -165,25 +132,17 @@ async fn main(spawner: Spawner) {
     defmt::info!("Stack is up!");
 
     crate::text::render_text_to_leds("NTP", konst::GREEN, &mut leds).await;
-    let Ok((udp_socket, ntp_client)) =
-        crate::ntp::NtpClient::new(network_stack, &mut ntp_stack_resources).await
-    else {
-        crate::text::render_text_to_leds("NTP", konst::RED, &mut leds).await;
-        loop {
-            Timer::after_secs(1).await;
-        }
-    };
-
+    let (udp_socket, ntp_client) =
+        crate::ntp::new_ntp_client(network_stack, &mut ntp_stack_resources, &mut leds).await;
     let keep_aliver = crate::mqtt::MqttKeepAliver::new(Duration::from_secs(15));
 
-    let Ok(mut mqtt_client) =
-        crate::mqtt::MqttClient::new(network_stack, &mut mqtt_stack_resources, &keep_aliver).await
-    else {
-        crate::text::render_text_to_leds("MQTT", konst::RED, &mut leds).await;
-        loop {
-            Timer::after_secs(1).await;
-        }
-    };
+    let mut mqtt_client = crate::mqtt::new_mqtt_client(
+        network_stack,
+        &mut mqtt_stack_resources,
+        &keep_aliver,
+        &mut leds,
+    )
+    .await;
     defmt::info!("NTP, MQTT setup done!");
 
     defmt::info!("Starting");

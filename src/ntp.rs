@@ -56,8 +56,27 @@ impl Default for NtpStackResources {
     }
 }
 
+pub async fn new_ntp_client<'network, P, const S: usize>(
+    network_stack: embassy_net::Stack<'network>,
+    ntp_stack_resources: &'network mut NtpStackResources,
+    leds: &mut embassy_rp::pio_programs::ws2812::PioWs2812<'_, P, S, { crate::konst::NUM_LEDS }>,
+) -> (UdpSocket<'network>, crate::ntp::NtpClient)
+where
+    P: embassy_rp::pio::Instance,
+{
+    let Ok((udp_socket, ntp_client)) = NtpClient::new(network_stack, ntp_stack_resources).await
+    else {
+        crate::text::render_text_to_leds("NTP", crate::konst::RED, leds).await;
+        loop {
+            embassy_time::Timer::after_secs(1).await;
+        }
+    };
+
+    (udp_socket, ntp_client)
+}
+
 impl NtpClient {
-    pub async fn new<'network>(
+    async fn new<'network>(
         network_stack: embassy_net::Stack<'network>,
         ntp_stack_resources: &'network mut NtpStackResources,
     ) -> Result<(UdpSocket<'network>, crate::ntp::NtpClient), NtpClientError> {

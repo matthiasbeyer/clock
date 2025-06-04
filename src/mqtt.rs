@@ -76,8 +76,28 @@ impl Default for MqttStackResources {
     }
 }
 
+pub async fn new_mqtt_client<'network, P, const S: usize>(
+    network_stack: embassy_net::Stack<'network>,
+    mqtt_stack_resources: &'network mut MqttStackResources,
+    keep_aliver: &MqttKeepAliver,
+    leds: &mut embassy_rp::pio_programs::ws2812::PioWs2812<'_, P, S, { crate::konst::NUM_LEDS }>,
+) -> MqttClient<'network>
+where
+    P: embassy_rp::pio::Instance,
+{
+    let Ok(mqtt_client) = MqttClient::new(network_stack, mqtt_stack_resources, keep_aliver).await
+    else {
+        crate::text::render_text_to_leds("MQTT", crate::konst::RED, leds).await;
+        loop {
+            embassy_time::Timer::after_secs(1).await;
+        }
+    };
+
+    mqtt_client
+}
+
 impl<'network> MqttClient<'network> {
-    pub async fn new(
+    async fn new(
         network_stack: embassy_net::Stack<'network>,
         mqtt_stack_resources: &'network mut MqttStackResources,
         keep_aliver: &MqttKeepAliver,
