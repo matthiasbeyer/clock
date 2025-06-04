@@ -38,7 +38,7 @@ impl crate::render::RenderToDisplay for Text<'_> {
 pub async fn render_text_to_leds<P, const S: usize>(
     text: &str,
     color: embedded_graphics::pixelcolor::Rgb888,
-    leds: &mut embassy_rp::pio_programs::ws2812::PioWs2812<'_, P, S, { crate::NUM_LEDS }>,
+    leds: &mut embassy_rp::pio_programs::ws2812::PioWs2812<'_, P, S, { crate::konst::NUM_LEDS }>,
 ) where
     P: embassy_rp::pio::Instance,
 {

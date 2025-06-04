@@ -1,13 +1,13 @@
 use smart_leds::RGB8;
 
 pub struct OutputBuffer {
-    buf: [RGB8; crate::NUM_LEDS],
+    buf: [RGB8; crate::konst::NUM_LEDS],
 }
 
 impl OutputBuffer {
     pub fn new() -> Self {
         Self {
-            buf: [RGB8::default(); crate::NUM_LEDS],
+            buf: [RGB8::default(); crate::konst::NUM_LEDS],
         }
     }
 
@@ -16,14 +16,19 @@ impl OutputBuffer {
         C: embedded_graphics::prelude::PixelColor,
     {
         pixel.0.y >= 0
-            && ((pixel.0.y as usize) < crate::NUM_LEDS_Y)
+            && ((pixel.0.y as usize) < crate::konst::NUM_LEDS_Y)
             && pixel.0.x >= 0
-            && ((pixel.0.x as usize) < crate::NUM_LEDS_X)
+            && ((pixel.0.x as usize) < crate::konst::NUM_LEDS_X)
     }
 
     pub async fn render_into<'d, P, const S: usize>(
         &self,
-        ws2812: &mut embassy_rp::pio_programs::ws2812::PioWs2812<'d, P, S, { crate::NUM_LEDS }>,
+        ws2812: &mut embassy_rp::pio_programs::ws2812::PioWs2812<
+            'd,
+            P,
+            S,
+            { crate::konst::NUM_LEDS },
+        >,
     ) where
         P: embassy_rp::pio::Instance,
     {

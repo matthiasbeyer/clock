@@ -6,27 +6,24 @@ use cyw43_pio::PioSpi;
 use defmt_rtt as _;
 use embassy_executor::Spawner;
 use embassy_net::StackResources;
-use embassy_rp::bind_interrupts;
 use embassy_rp::config::Config;
 use embassy_rp::gpio::Output;
 use embassy_rp::peripherals::DMA_CH1;
 use embassy_rp::peripherals::PIO0;
-use embassy_rp::pio::InterruptHandler;
 use embassy_rp::pio::Pio;
 use embassy_rp::pio_programs::ws2812::PioWs2812;
 use embassy_rp::pio_programs::ws2812::PioWs2812Program;
 use embassy_time::Duration;
 use embassy_time::Timer;
 use embassy_time::WithTimeout;
-use embedded_graphics::pixelcolor::Rgb888;
 use panic_probe as _;
 use render::RenderToDisplay;
 use render::Renderable;
-use static_cell::StaticCell;
 
 mod bounding_box;
 mod clock;
 mod color;
+mod konst;
 mod mapping;
 mod mqtt;
 mod ntp;
@@ -35,56 +32,6 @@ mod program;
 mod render;
 mod text;
 mod util;
-
-const GREEN: Rgb888 = Rgb888::new(0, 100, 0);
-const YELLOW: Rgb888 = Rgb888::new(100, 100, 0);
-const RED: Rgb888 = Rgb888::new(100, 0, 0);
-
-pub const NTP_SERVER: &str = env!("NTP_SERVER");
-
-const MQTT_BROKER_ADDR: &str = env!("MQTT_BROKER_ADDR");
-const MQTT_BROKER_PORT: u16 = match u16::from_str_radix(env!("MQTT_BROKER_PORT"), 10) {
-    Err(_error) => panic!("MQTT_BROKER_PORT is not a valid u16"),
-    Ok(port) => port,
-};
-
-const MQTT_USER: &str = env!("MQTT_USER");
-const MQTT_PASSWORD: &str = env!("MQTT_PASSWORD");
-const MQTT_CLIENT_ID: &str = env!("MQTT_CLIENT_ID");
-const MQTT_TOPIC_DEVICE_STATE: &str = concat!("device/", env!("MQTT_DEVICE_ID"), "/state");
-
-macro_rules! topic {
-    (state: $name:literal) => {
-        concat!("device/", env!("MQTT_DEVICE_ID"), "/state/", $name)
-    };
-
-    (command: $name:literal) => {
-        concat!("device/", env!("MQTT_DEVICE_ID"), "/command/", $name)
-    };
-}
-
-const MQTT_TOPIC_CURRENT_PROGRAM: &str = topic!(state: "current_program");
-const MQTT_TOPIC_START_PROGRAM: &str = topic!(command: "start_program");
-const MQTT_TOPIC_TIMEZONE_OFFSET: &str = topic!(command: "timezone_offset");
-const MQTT_TOPIC_SET_COLOR: &str = topic!(command: "set_color");
-
-const WIFI_NETWORK: &str = env!("WIFI_NETWORK");
-const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
-
-pub const NUM_LEDS: usize = 512;
-pub const NUM_LEDS_X: usize = 32;
-pub const NUM_LEDS_Y: usize = 16;
-
-bind_interrupts!(struct Irqs {
-    PIO0_IRQ_0 => InterruptHandler<PIO0>;
-});
-
-static NETWORK_STACK_RESOURCES: StaticCell<StackResources<6>> = StaticCell::new();
-
-static NETWORK_STATE: StaticCell<cyw43::State> = StaticCell::new();
-
-static FIRMWARE_FW: &[u8] = include_bytes!(env!("CYW43_FIRMWARE_BIN"));
-static FIRMWARE_CLM: &[u8] = include_bytes!(env!("CYW43_FIRMWARE_CLM_BIN"));
 
 #[embassy_executor::task]
 async fn cyw43_task(
@@ -112,7 +59,7 @@ async fn main(spawner: Spawner) {
         sm1,
         irq0,
         ..
-    } = Pio::new(p.PIO0, Irqs);
+    } = Pio::new(p.PIO0, crate::konst::Irqs);
 
     let pwr = Output::new(p.PIN_23, embassy_rp::gpio::Level::Low);
     let cs = Output::new(p.PIN_25, embassy_rp::gpio::Level::High);
@@ -129,14 +76,14 @@ async fn main(spawner: Spawner) {
 
     let program = PioWs2812Program::new(&mut common);
     let mut leds = PioWs2812::new(&mut common, sm1, p.DMA_CH0, p.PIN_16, &program);
-    crate::text::render_text_to_leds("Booting", GREEN, &mut leds).await;
+    crate::text::render_text_to_leds("Booting", konst::GREEN, &mut leds).await;
 
-    let state = NETWORK_STATE.init(cyw43::State::new());
-    let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, FIRMWARE_FW).await;
+    let state = konst::NETWORK_STATE.init(cyw43::State::new());
+    let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, konst::FIRMWARE_FW).await;
 
     spawner.spawn(cyw43_task(runner)).unwrap();
 
-    control.init(FIRMWARE_CLM).await;
+    control.init(konst::FIRMWARE_CLM).await;
     control
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
@@ -148,23 +95,30 @@ async fn main(spawner: Spawner) {
     let (network_stack, runner) = embassy_net::new(
         net_device,
         config,
-        NETWORK_STACK_RESOURCES.init(StackResources::new()),
+        konst::NETWORK_STACK_RESOURCES.init(StackResources::new()),
         0,
     );
 
     // Launch network task
     spawner.spawn(net_task(runner)).unwrap();
 
-    crate::text::render_text_to_leds(concat!("WIFI: ", env!("WIFI_NETWORK")), GREEN, &mut leds)
-        .await;
+    crate::text::render_text_to_leds(
+        concat!("WIFI: ", env!("WIFI_NETWORK")),
+        konst::GREEN,
+        &mut leds,
+    )
+    .await;
     loop {
         match control
-            .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
+            .join(
+                konst::WIFI_NETWORK,
+                JoinOptions::new(konst::WIFI_PASSWORD.as_bytes()),
+            )
             .await
         {
             Ok(_) => break,
             Err(err) => {
-                crate::text::render_text_to_leds("Wifi failed", RED, &mut leds).await;
+                crate::text::render_text_to_leds("Wifi failed", konst::RED, &mut leds).await;
                 defmt::info!("join failed with status={}", err.status);
             }
         }
@@ -172,32 +126,34 @@ async fn main(spawner: Spawner) {
 
     // Wait for DHCP, not necessary when using static IP
     defmt::info!("waiting for DHCP...");
-    crate::text::render_text_to_leds("NET", GREEN, &mut leds).await;
+    crate::text::render_text_to_leds("NET", konst::GREEN, &mut leds).await;
     {
         let mut tries = 0u32;
         while !network_stack.is_config_up() {
             Timer::after_millis(100).await;
             tries += 1;
             match tries {
-                0..10 => crate::text::render_text_to_leds("NET.", GREEN, &mut leds).await,
-                10..20 => crate::text::render_text_to_leds("NET..", YELLOW, &mut leds).await,
-                20.. => crate::text::render_text_to_leds("NET...", YELLOW, &mut leds).await,
+                0..10 => crate::text::render_text_to_leds("NET.", konst::GREEN, &mut leds).await,
+                10..20 => crate::text::render_text_to_leds("NET..", konst::YELLOW, &mut leds).await,
+                20.. => crate::text::render_text_to_leds("NET...", konst::YELLOW, &mut leds).await,
             };
         }
     }
     defmt::info!("DHCP is now up!");
 
     defmt::info!("waiting for link up...");
-    crate::text::render_text_to_leds("DHCP", GREEN, &mut leds).await;
+    crate::text::render_text_to_leds("DHCP", konst::GREEN, &mut leds).await;
     {
         let mut tries = 0u32;
         while !network_stack.is_link_up() {
             Timer::after_millis(500).await;
             tries += 1;
             match tries {
-                0..10 => crate::text::render_text_to_leds("DHCP.", GREEN, &mut leds).await,
-                10..20 => crate::text::render_text_to_leds("DHCP..", YELLOW, &mut leds).await,
-                20.. => crate::text::render_text_to_leds("DHCP...", YELLOW, &mut leds).await,
+                0..10 => crate::text::render_text_to_leds("DHCP.", konst::GREEN, &mut leds).await,
+                10..20 => {
+                    crate::text::render_text_to_leds("DHCP..", konst::YELLOW, &mut leds).await
+                }
+                20.. => crate::text::render_text_to_leds("DHCP...", konst::YELLOW, &mut leds).await,
             };
         }
     }
@@ -208,11 +164,11 @@ async fn main(spawner: Spawner) {
     network_stack.wait_config_up().await;
     defmt::info!("Stack is up!");
 
-    crate::text::render_text_to_leds("NTP", GREEN, &mut leds).await;
+    crate::text::render_text_to_leds("NTP", konst::GREEN, &mut leds).await;
     let Ok((udp_socket, ntp_client)) =
         crate::ntp::NtpClient::new(network_stack, &mut ntp_stack_resources).await
     else {
-        crate::text::render_text_to_leds("NTP", RED, &mut leds).await;
+        crate::text::render_text_to_leds("NTP", konst::RED, &mut leds).await;
         loop {
             Timer::after_secs(1).await;
         }
@@ -223,7 +179,7 @@ async fn main(spawner: Spawner) {
     let Ok(mut mqtt_client) =
         crate::mqtt::MqttClient::new(network_stack, &mut mqtt_stack_resources, &keep_aliver).await
     else {
-        crate::text::render_text_to_leds("MQTT", RED, &mut leds).await;
+        crate::text::render_text_to_leds("MQTT", konst::RED, &mut leds).await;
         loop {
             Timer::after_secs(1).await;
         }
@@ -241,7 +197,7 @@ async fn main(spawner: Spawner) {
             time
         }
         Err(e) => {
-            crate::text::render_text_to_leds("NTP failed", RED, &mut leds).await;
+            crate::text::render_text_to_leds("NTP failed", konst::RED, &mut leds).await;
             defmt::error!("Error getting time: {:?}", e);
             loop {
                 embassy_time::Timer::after(Duration::from_secs(60)).await
@@ -262,7 +218,7 @@ async fn main(spawner: Spawner) {
     let _ = mqtt_client.current_program("clock").await;
     let mut keep_aliver = keep_aliver;
 
-    crate::text::render_text_to_leds("Booted", GREEN, &mut leds).await;
+    crate::text::render_text_to_leds("Booted", konst::GREEN, &mut leds).await;
     Timer::after_secs(1).await;
 
     loop {

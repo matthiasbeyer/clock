@@ -4,7 +4,7 @@ use embassy_net::udp::UdpSocket;
 use sntpc::NtpContext;
 use sntpc::NtpTimestampGenerator;
 
-use crate::NTP_SERVER;
+use crate::konst::NTP_SERVER;
 
 #[derive(Copy, Clone)]
 pub struct Timestamp {

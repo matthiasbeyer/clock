@@ -1,9 +1,9 @@
-use crate::NUM_LEDS_X;
-use crate::NUM_LEDS_Y;
+use crate::konst::NUM_LEDS_X;
+use crate::konst::NUM_LEDS_Y;
 
 // I am too dumb to find the algorithm that computes this
 #[rustfmt::skip]
-pub const X_Y_TO_N_MAPPING_TABLE: [[usize; NUM_LEDS_X]; NUM_LEDS_Y] = [
+pub const X_Y_TO_N_MAPPING_TABLE: [[usize; crate::konst::NUM_LEDS_X]; crate::konst::NUM_LEDS_Y] = [
     [248, 247, 232, 231, 216, 215, 200, 199, 184, 183, 168, 167, 152, 151, 136, 135, 120, 119, 104, 103, 88, 87, 72, 71, 56, 55, 40, 39, 24, 23, 8,  7],
     [249, 246, 233, 230, 217, 214, 201, 198, 185, 182, 169, 166, 153, 150, 137, 134, 121, 118, 105, 102, 89, 86, 73, 70, 57, 54, 41, 38, 25, 22, 9,  6],
     [250, 245, 234, 229, 218, 213, 202, 197, 186, 181, 170, 165, 154, 149, 138, 133, 122, 117, 106, 101, 90, 85, 74, 69, 58, 53, 42, 37, 26, 21, 10, 5],

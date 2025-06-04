@@ -1,12 +1,12 @@
 use embassy_net::dns::DnsQueryType;
 use embassy_net::tcp::TcpSocket;
 
-use crate::MQTT_BROKER_ADDR;
-use crate::MQTT_BROKER_PORT;
-use crate::MQTT_CLIENT_ID;
-use crate::MQTT_TOPIC_CURRENT_PROGRAM;
-use crate::MQTT_TOPIC_DEVICE_STATE;
-use crate::MQTT_USER;
+use crate::konst::MQTT_BROKER_ADDR;
+use crate::konst::MQTT_BROKER_PORT;
+use crate::konst::MQTT_CLIENT_ID;
+use crate::konst::MQTT_TOPIC_CURRENT_PROGRAM;
+use crate::konst::MQTT_TOPIC_DEVICE_STATE;
+use crate::konst::MQTT_USER;
 
 pub struct MqttClient<'network> {
     client: rust_mqtt::client::client::MqttClient<
@@ -91,7 +91,7 @@ impl<'network> MqttClient<'network> {
         tcp_socket.set_keep_alive(Some(embassy_time::Duration::from_secs(5)));
 
         let addrs = network_stack
-            .dns_query(MQTT_BROKER_ADDR, DnsQueryType::A)
+            .dns_query(crate::konst::MQTT_BROKER_ADDR, DnsQueryType::A)
             .await
             .map_err(|error| {
                 defmt::error!(
@@ -115,7 +115,10 @@ impl<'network> MqttClient<'network> {
             MQTT_BROKER_PORT
         );
 
-        if let Err(error) = tcp_socket.connect((mqtt_addr, MQTT_BROKER_PORT)).await {
+        if let Err(error) = tcp_socket
+            .connect((mqtt_addr, crate::konst::MQTT_BROKER_PORT))
+            .await
+        {
             defmt::error!(
                 "Failed to connect to MQTT Broker ({}:{}): {:?}",
                 mqtt_addr,
@@ -131,7 +134,7 @@ impl<'network> MqttClient<'network> {
             rust_mqtt::utils::rng_generator::CountingRng(20000),
         );
         config.add_max_subscribe_qos(rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0);
-        config.add_client_id(MQTT_CLIENT_ID);
+        config.add_client_id(crate::konst::MQTT_CLIENT_ID);
         config.max_packet_size = 100;
         config.keep_alive = keep_aliver.as_secs();
 
@@ -140,7 +143,11 @@ impl<'network> MqttClient<'network> {
         // config.add_password(MQTT_PASSWORD);
 
         defmt::info!("Installing WILL message on {}", MQTT_TOPIC_DEVICE_STATE);
-        config.add_will(MQTT_TOPIC_DEVICE_STATE, "disconnected".as_bytes(), false);
+        config.add_will(
+            crate::konst::MQTT_TOPIC_DEVICE_STATE,
+            "disconnected".as_bytes(),
+            false,
+        );
 
         let mut client = rust_mqtt::client::client::MqttClient::<_, 5, _>::new(
             tcp_socket,
@@ -168,8 +175,8 @@ impl<'network> MqttClient<'network> {
         }
 
         for topic in [
-            crate::MQTT_TOPIC_START_PROGRAM,
-            crate::MQTT_TOPIC_TIMEZONE_OFFSET,
+            crate::konst::MQTT_TOPIC_START_PROGRAM,
+            crate::konst::MQTT_TOPIC_TIMEZONE_OFFSET,
         ] {
             match client.subscribe_to_topic(topic).await {
                 Ok(()) => defmt::info!("Subscribing to '{}' succeeded", topic),
@@ -192,7 +199,7 @@ impl<'network> MqttClient<'network> {
         match self
             .client
             .send_message(
-                MQTT_TOPIC_DEVICE_STATE,
+                crate::konst::MQTT_TOPIC_DEVICE_STATE,
                 "booting".as_bytes(),
                 rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
                 false, // do not retain
@@ -220,7 +227,7 @@ impl<'network> MqttClient<'network> {
         match self
             .client
             .send_message(
-                MQTT_TOPIC_CURRENT_PROGRAM,
+                crate::konst::MQTT_TOPIC_CURRENT_PROGRAM,
                 program_name.as_bytes(),
                 rust_mqtt::packet::v5::publish_packet::QualityOfService::QoS0,
                 true, // do retain
@@ -251,9 +258,13 @@ impl<'network> MqttClient<'network> {
             .await
             .map_err(MqttClientError::Recv)?
         {
-            (crate::MQTT_TOPIC_TIMEZONE_OFFSET, payload) => Ok(MqttPayload::Timezone(payload)),
-            (crate::MQTT_TOPIC_START_PROGRAM, payload) => Ok(MqttPayload::StartProgram(payload)),
-            (crate::MQTT_TOPIC_SET_COLOR, payload) => Ok(MqttPayload::SetColor(payload)),
+            (crate::konst::MQTT_TOPIC_TIMEZONE_OFFSET, payload) => {
+                Ok(MqttPayload::Timezone(payload))
+            }
+            (crate::konst::MQTT_TOPIC_START_PROGRAM, payload) => {
+                Ok(MqttPayload::StartProgram(payload))
+            }
+            (crate::konst::MQTT_TOPIC_SET_COLOR, payload) => Ok(MqttPayload::SetColor(payload)),
             (topic, payload) => Ok(MqttPayload::Unknown { topic, payload }),
         }
     }
