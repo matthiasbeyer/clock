@@ -281,6 +281,7 @@ async fn main(spawner: Spawner) {
                 }
                 Ok(Err(mqtt_error)) => defmt::error!("MQTT Error: {:?}", mqtt_error),
                 Ok(Ok(payload)) => {
+                    defmt::debug!("Handling payload");
                     handle_next_mqtt_payload(payload, &mut clock, &mut color_provider);
                 }
             }
