@@ -244,7 +244,7 @@ impl<'network> MqttClient<'network> {
         }
     }
 
-    pub async fn next_payload(&mut self) -> Result<MqttPayload, MqttClientError> {
+    pub async fn next_payload<'p>(&'p mut self) -> Result<MqttPayload<'p>, MqttClientError> {
         match self
             .client
             .receive_message()
