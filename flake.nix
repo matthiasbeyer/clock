@@ -88,7 +88,7 @@
             rustfmt'
             rustTarget
 
-            pkgs.probe-rs
+            pkgs.probe-rs-tools
             pkgs.rerun
             pkgs.gitlint
           ];
