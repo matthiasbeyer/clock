@@ -1,5 +1,5 @@
 {
-  description = "The clock Rust library";
+  description = "The Rust clock server";
   inputs = {
     nixpkgs.url = "nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
@@ -8,15 +8,19 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    embassy = {
-      url = "github:embassy-rs/embassy";
-      flake = false;
-    };
   };
 
-  outputs = inputs@{ self, nixpkgs, crane, flake-utils, rust-overlay, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    inputs@{
+      self,
+      nixpkgs,
+      crane,
+      flake-utils,
+      rust-overlay,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -24,27 +28,72 @@
         };
 
         rustTarget = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-        unstableRustTarget = pkgs.rust-bin.selectLatestNightlyWith (toolchain: toolchain.default.override {
-          extensions = [ "rust-src" "miri" "rustfmt" ];
-        });
+
+        unstableRustTarget = pkgs.rust-bin.selectLatestNightlyWith (
+          toolchain:
+          toolchain.default.override {
+            extensions = [
+              "rust-src"
+              "miri"
+              "rustfmt"
+            ];
+          }
+        );
+
         craneLib = (crane.mkLib pkgs).overrideToolchain rustTarget;
+
         unstableCraneLib = (crane.mkLib pkgs).overrideToolchain unstableRustTarget;
 
         tomlInfo = craneLib.crateNameFromCargoToml { cargoToml = ./Cargo.toml; };
-        inherit (tomlInfo) pname version;
-        src = ./.;
+
+        src =
+          let
+            markdownFilter = path: _type: pkgs.lib.hasSuffix ".md" path;
+            filterPath =
+              path: type:
+              builtins.any (f: f path type) [
+                markdownFilter
+                craneLib.filterCargoSources
+                pkgs.lib.cleanSourceFilter
+              ];
+          in
+          pkgs.lib.cleanSourceWith {
+            src = ./.;
+            filter = filterPath;
+          };
+
+        rustSrc = pkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset =
+            let
+              includeFilesWithExt = ext: (pkgs.lib.fileset.fileFilter (file: file.hasExt ext) ./.);
+            in
+            pkgs.lib.fileset.unions (
+              [
+                ./Cargo.lock
+                ./README.md
+              ]
+              ++ (builtins.map includeFilesWithExt [
+                "rs"
+                "toml"
+                "sql"
+              ])
+            );
+        };
 
         rustfmt' = pkgs.writeShellScriptBin "rustfmt" ''
           exec "${unstableRustTarget}/bin/rustfmt" "$@"
         '';
 
         cargoArtifacts = craneLib.buildDepsOnly {
-          inherit src;
+          src = rustSrc;
           cargoExtraArgs = "--all-features --all";
         };
 
         clock = craneLib.buildPackage {
-          inherit cargoArtifacts src version;
+          inherit cargoArtifacts;
+          src = rustSrc;
+          version = tomlInfo.version;
           cargoExtraArgs = "--all-features --all";
         };
 
@@ -54,18 +103,21 @@
           inherit clock;
 
           clock-clippy = craneLib.cargoClippy {
-            inherit cargoArtifacts src;
+            inherit cargoArtifacts;
+            src = rustSrc;
             cargoExtraArgs = "--all --all-features";
             cargoClippyExtraArgs = "-- --deny warnings";
           };
 
           clock-fmt = unstableCraneLib.cargoFmt {
-            inherit src;
+            src = rustSrc;
           };
         };
 
-        packages.clock = clock;
-        packages.default = packages.clock;
+        packages = {
+          inherit clock;
+          default = packages.clock;
+        };
 
         apps.default = flake-utils.lib.mkApp {
           name = "clock";
@@ -73,23 +125,10 @@
         };
 
         devShells.default = pkgs.mkShell {
-          CYW43_FIRMWARE_BIN = "${inputs.embassy}/cyw43-firmware/43439A0.bin";
-          CYW43_FIRMWARE_CLM_BIN = "${inputs.embassy}/cyw43-firmware/43439A0_clm.bin";
-
-          shellHook = ''
-            # This sets the environment variables required for the project
-            source env.sh
-
-            # This sources the private env for this project, if the file exists.
-            [ -e env.private.sh ] && source env.private.sh
-          '';
-
           nativeBuildInputs = [
             rustfmt'
             rustTarget
 
-            pkgs.probe-rs-tools
-            pkgs.rerun
             pkgs.gitlint
           ];
         };
