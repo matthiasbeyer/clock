@@ -1,18 +1,19 @@
 use embedded_graphics::geometry::Point;
-use embedded_graphics::mono_font::ascii::FONT_6X10;
 use embedded_graphics::mono_font::MonoTextStyle;
-use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::prelude::DrawTarget;
 use embedded_graphics::text::Text;
 use embedded_graphics::Drawable;
-use rumqttc::v5::MqttOptions;
 use smart_leds_matrix::layout::Rectangular;
 use smart_leds_matrix::SmartLedMatrix;
 
 mod cli;
 mod config;
 mod error;
+mod event;
 mod logging;
+mod mqtt;
 mod systemd;
+mod util;
 mod writer;
 
 #[tokio::main(flavor = "current_thread")]
@@ -55,51 +56,62 @@ async fn run(
             .map_err(crate::error::Error::UDPBind)?,
     )?;
 
-    // Assuming you have a Vec<u8> buffer for your DDP LED matrix
     let writer = writer::Writer::new(ddp_connection);
-
-    let mut matrix =
-        SmartLedMatrix::<_, _, { 16 * 32 }>::new(writer, Rectangular::new(32, 16));
-
-    matrix.set_brightness(10);
-
-    // Create a text style
-    let style = MonoTextStyle::new(
-        &FONT_6X10,
-        embedded_graphics::pixelcolor::Rgb888::new(100, 100, 100),
-    );
-
-    // Draw text to the buffer
-    Text::new("LED", Point::new(0, 10), style).draw(&mut matrix).unwrap();
+    let mut matrix = SmartLedMatrix::<_, _, { 32 * 16 }>::new(writer, Rectangular::new(32, 16));
+    matrix.set_brightness(config.display.initial_brightness.clamp(0, 100));
+    matrix
+        .clear(embedded_graphics::pixelcolor::Rgb888::default())
+        .unwrap();
     matrix.flush()?;
 
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    Ok(())
-}
+    let (event_sender, mut event_receiver) = tokio::sync::mpsc::channel::<event::Event>(100);
+    // tokio::task::spawn({
+    //     let mqtt_config = config.mqtt.clone();
+    //     async move { mqtt::run(mqtt_config, event_sender).await }
+    // });
 
-async fn start_mqtt_client(config: &crate::config::Config) -> Result<(), crate::error::MqttError> {
-    let mut mqttoptions = MqttOptions::new(
-        &config.mqtt.client_name,
-        config.mqtt.host.to_string(),
-        config.mqtt.port,
+    let mut render_interval = tokio::time::interval(std::time::Duration::from_secs(1));
+    let time_display_format = time::format_description::parse("[hour]:[minute]").unwrap();
+    let time_font = config.display.time_font.into();
+    let time_offset = Point::new(
+        config.display.time_offset_x.into(),
+        config.display.time_offset_y.into(),
     );
-    mqttoptions.set_keep_alive(config.mqtt.keep_alive);
+    let mut clock_rainbow_style =
+        util::rainbow_color_iterator().map(|color| MonoTextStyle::new(&time_font, color));
 
-    let (mut client, mut eventloop) = rumqttc::v5::AsyncClient::new(mqttoptions, 100);
+    loop {
+        tokio::select! {
+            _ = render_interval.tick() => {
+                let time = time::OffsetDateTime::now_local().map_err(error::Error::TimeOffset)?;
+                let time_str = time.format(&time_display_format).map_err(error::Error::TimeFormatting)?;
 
-    let subscribe_topics: Vec<&'static str> = vec!["display/text", "ctrl/brightness"];
+                matrix.clear(embedded_graphics::pixelcolor::Rgb888::default()).unwrap();
+                matrix.flush()?;
 
-    let subs = subscribe_topics.iter().map(|topic| {
-        rumqttc::v5::mqttbytes::v5::Filter::new(
-            format!("{prefix}/{topic}", prefix = config.mqtt.topic_prefix),
-            rumqttc::v5::mqttbytes::QoS::from(config.mqtt.qos),
-        )
-    });
+                // Draw text to the buffer
+                Text::new(&time_str, time_offset, clock_rainbow_style.next().unwrap()).draw(&mut matrix).unwrap();
+                matrix.flush()?;
+            }
 
-    client
-        .subscribe_many(subs)
-        .await
-        .map_err(crate::error::MqttError::Subscribing)?;
+            event = event_receiver.recv() => {
+                let Some(event) = event else { tracing::error!("Receiver closed"); break };
 
-    todo!()
+                match event {
+                    event::Event::SetBrightness(brightness) => {
+                        tracing::info!(?brightness, "Setting brightness");
+                        matrix.set_brightness(brightness.clamp(5, 100));
+                    },
+
+                }
+            }
+
+            _ctrl_c = tokio::signal::ctrl_c() => {
+                tracing::info!("Ctrl-C received, shutting down");
+                break
+            }
+        }
+    }
+
+    Ok(())
 }

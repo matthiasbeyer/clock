@@ -9,6 +9,12 @@ pub enum Error {
     #[error("DDP error")]
     Ddp(#[from] ddp_rs::error::DDPError),
 
+    #[error("Error getting local time")]
+    TimeOffset(#[source] time::error::IndeterminateOffset),
+
+    #[error("Error formatting time")]
+    TimeFormatting(#[source] time::error::Format),
+
     #[error("Failed to bind UDP socket")]
     UDPBind(#[source] std::io::Error),
 

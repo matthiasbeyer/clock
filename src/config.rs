@@ -9,9 +9,28 @@ pub struct DisplayConfig {
     pub host: std::net::IpAddr,
     pub port: u16,
     pub udp_port: u16,
+    pub initial_brightness: u8,
+    pub time_font: Font,
+    pub time_offset_x: u8,
+    pub time_offset_y: u8,
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub enum Font {
+    Font5x8,
+    Font6x10,
+}
+
+impl From<Font> for embedded_graphics::mono_font::MonoFont<'static> {
+    fn from(value: Font) -> Self {
+        match value {
+            Font::Font5x8 => embedded_graphics::mono_font::ascii::FONT_5X8,
+            Font::Font6x10 => embedded_graphics::mono_font::ascii::FONT_6X10,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct MqttConfig {
     pub host: std::net::IpAddr,
     pub port: u16,
