@@ -1,10 +1,19 @@
+use embedded_graphics::geometry::Point;
+use embedded_graphics::mono_font::ascii::FONT_6X10;
+use embedded_graphics::mono_font::MonoTextStyle;
+use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::text::Text;
+use embedded_graphics::Drawable;
 use rumqttc::v5::MqttOptions;
+use smart_leds_matrix::layout::Rectangular;
+use smart_leds_matrix::SmartLedMatrix;
 
 mod cli;
 mod config;
 mod error;
 mod logging;
 mod systemd;
+mod writer;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> color_eyre::eyre::Result<()> {
@@ -38,7 +47,7 @@ async fn run(
     _cli: crate::cli::Cli,
     config: crate::config::Config,
 ) -> Result<(), crate::error::Error> {
-    let mut ddp_connection = ddp_rs::connection::DDPConnection::try_new(
+    let ddp_connection = ddp_rs::connection::DDPConnection::try_new(
         format!("{}:{}", config.display.host, config.display.port),
         ddp_rs::protocol::PixelConfig::default(), // Default is RGB, 8 bits ber channel
         ddp_rs::protocol::ID::Default,
@@ -46,26 +55,25 @@ async fn run(
             .map_err(crate::error::Error::UDPBind)?,
     )?;
 
-    for i in 0u8..100u8 {
-        let high = 10u8.overflowing_mul(i).0;
+    // Assuming you have a Vec<u8> buffer for your DDP LED matrix
+    let writer = writer::Writer::new(ddp_connection);
 
-        // loop through some colors
+    let mut matrix =
+        SmartLedMatrix::<_, _, { 16 * 32 }>::new(writer, Rectangular::new(32, 16));
 
-        let temp: usize = ddp_connection.write(&[
-            high, 0, 0, high, 0, 0, 0, high, 0, 0, high, 0, 0, 0, high, 0, 0, high,
-        ])?;
+    matrix.set_brightness(10);
 
-        println!("sent {temp} packets");
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
+    // Create a text style
+    let style = MonoTextStyle::new(
+        &FONT_6X10,
+        embedded_graphics::pixelcolor::Rgb888::new(100, 100, 100),
+    );
 
-    // let mut every_second = tokio::time::interval(std::time::Duration::from_secs(30));
-    // loop {
-    //     tokio::select! {
-    //         _ = every_second.tick() => {
-    //         },
-    //     }
-    // }
+    // Draw text to the buffer
+    Text::new("LED", Point::new(0, 10), style).draw(&mut matrix).unwrap();
+    matrix.flush()?;
+
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     Ok(())
 }
 

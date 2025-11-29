@@ -7,7 +7,7 @@ pub enum Error {
     Config(#[from] crate::config::ConfigError),
 
     #[error("DDP error")]
-    DDP(#[from] ddp_rs::error::DDPError),
+    Ddp(#[from] ddp_rs::error::DDPError),
 
     #[error("Failed to bind UDP socket")]
     UDPBind(#[source] std::io::Error),
