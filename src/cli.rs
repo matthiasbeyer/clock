@@ -8,4 +8,13 @@ pub struct Cli {
     /// Path of the configuration file
     #[clap(long, short)]
     pub config: camino::Utf8PathBuf,
+
+    #[clap(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum Command {
+    Run,
+    VerifyConfig,
 }
