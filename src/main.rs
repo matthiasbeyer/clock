@@ -65,10 +65,12 @@ async fn run(
     matrix.flush()?;
 
     let (event_sender, mut event_receiver) = tokio::sync::mpsc::channel::<event::Event>(100);
-    // tokio::task::spawn({
-    //     let mqtt_config = config.mqtt.clone();
-    //     async move { mqtt::run(mqtt_config, event_sender).await }
-    // });
+    let cancellation_token = tokio_util::sync::CancellationToken::new();
+    tokio::task::spawn({
+        let mqtt_config = config.mqtt.clone();
+        let cancellation_token = cancellation_token.clone();
+        mqtt::run(mqtt_config, cancellation_token, event_sender)
+    });
 
     let mut render_interval = tokio::time::interval(std::time::Duration::from_secs(1));
     let time_display_format = time::format_description::parse("[hour]:[minute]").unwrap();
@@ -103,11 +105,15 @@ async fn run(
                         matrix.set_brightness(brightness.clamp(5, 100));
                     },
 
+                    event::Event::ShowText { duration_secs, text } => {
+                        tracing::info!(?duration_secs, ?text, "Showing text");
+                    },
                 }
             }
 
             _ctrl_c = tokio::signal::ctrl_c() => {
                 tracing::info!("Ctrl-C received, shutting down");
+                cancellation_token.cancel();
                 break
             }
         }

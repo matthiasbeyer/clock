@@ -26,4 +26,7 @@ pub enum Error {
 pub enum MqttError {
     #[error("Failed to subscribe")]
     Subscribing(#[source] rumqttc::v5::ClientError),
+
+    #[error("Connection failed")]
+    Connection(#[source] rumqttc::v5::ConnectionError),
 }
