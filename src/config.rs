@@ -18,6 +18,7 @@ pub struct DisplayConfig {
 #[derive(Debug, serde::Deserialize)]
 pub enum Font {
     Font5x8,
+    Font6x9,
     Font6x10,
 }
 
@@ -25,6 +26,7 @@ impl From<Font> for embedded_graphics::mono_font::MonoFont<'static> {
     fn from(value: Font) -> Self {
         match value {
             Font::Font5x8 => embedded_graphics::mono_font::ascii::FONT_5X8,
+            Font::Font6x9 => embedded_graphics::mono_font::ascii::FONT_6X9,
             Font::Font6x10 => embedded_graphics::mono_font::ascii::FONT_6X10,
         }
     }
