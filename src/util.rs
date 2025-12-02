@@ -1,58 +1,28 @@
-use core::fmt;
-use core::mem::MaybeUninit;
-use core::str::from_utf8_unchecked;
+pub fn rainbow_color_iterator() -> impl Iterator<Item = embedded_graphics::pixelcolor::Rgb888> {
+    fn hsv_to_rgb(hue: f32) -> (u8, u8, u8) {
+        let h = hue % 1.0;
+        let c = 1.0;
+        let x = c * (1.0 - ((h * 6.0) % 2.0 - 1.0).abs());
+        let m = 0.0;
 
-pub struct StackStr<const BUF_SIZE: usize> {
-    buffer: [u8; BUF_SIZE],
-    used: usize,
-}
+        let (r, g, b) = match (h * 6.0) as u32 {
+            0 => (c, x, 0.0),
+            1 => (x, c, 0.0),
+            2 => (0.0, c, x),
+            3 => (0.0, x, c),
+            4 => (x, 0.0, c),
+            5 => (c, 0.0, x),
+            _ => (0.0, 0.0, 0.0),
+        };
 
-impl<const BUF_SIZE: usize> StackStr<BUF_SIZE> {
-    /// Creates new buffer on the stack
-    pub fn new() -> Self {
-        // We don't need to initialize, because we write before we read
-        let buffer: [u8; BUF_SIZE] = unsafe { MaybeUninit::uninit().assume_init() };
-        StackStr { buffer, used: 0 }
+        (
+            ((r + m) * 255.0) as u8,
+            ((g + m) * 255.0) as u8,
+            ((b + m) * 255.0) as u8,
+        )
     }
 
-    /// Format numbers and strings
-    pub fn format(&mut self, args: fmt::Arguments) -> fmt::Result {
-        self.used = 0; // if format is used several times
-        fmt::write(self, args)
-    }
-
-    /// Get a reference to the result as a slice inside the buffer as str
-    pub fn as_str(&self) -> &str {
-        // We are really sure, that the buffer contains only valid utf8 characters
-        unsafe { from_utf8_unchecked(&self.buffer[..self.used]) }
-    }
-}
-
-impl<const BUF_SIZE: usize> fmt::Write for StackStr<BUF_SIZE> {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        let remaining_buf = &mut self.buffer[self.used..];
-        let raw_s = s.as_bytes();
-
-        // Treat imminent buffer overflow
-        if raw_s.len() > remaining_buf.len() {
-            remaining_buf.copy_from_slice(&raw_s[..remaining_buf.len()]);
-            self.used += remaining_buf.len();
-            Err(fmt::Error)
-        } else {
-            remaining_buf[..raw_s.len()].copy_from_slice(raw_s);
-            self.used += raw_s.len();
-            Ok(())
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! stackstr {
-    ($size:expr, $($arg:tt)*) => {{
-        let mut ss = $crate::util::StackStr::<$size>::new();
-
-        // Panic on buffer overflow
-        ss.format(core::format_args!($($arg)*)).expect("Buffer overflow");
-        ss
-    }}
+    std::iter::successors(Some(0.0), |&t| Some((t + 0.01) % 1.0))
+        .map(hsv_to_rgb)
+        .map(|(r, g, b)| embedded_graphics::pixelcolor::Rgb888::new(r, g, b))
 }
