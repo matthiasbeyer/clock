@@ -72,7 +72,7 @@ async fn run(
         mqtt::run(mqtt_config, cancellation_token, event_sender)
     });
 
-    let mut render_interval = tokio::time::interval(std::time::Duration::from_secs(1));
+    let mut render_interval = tokio::time::interval(config.display.interval);
     let time_display_format = time::format_description::parse("[hour]:[minute]").unwrap();
     let time_font = config.display.time_font.into();
     let time_offset = Point::new(

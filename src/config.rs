@@ -10,6 +10,8 @@ pub struct DisplayConfig {
     pub port: u16,
     pub udp_port: u16,
     pub initial_brightness: u8,
+    #[serde(with = "humantime_serde")]
+    pub interval: std::time::Duration,
     pub time_font: Font,
     pub time_offset_x: u8,
     pub time_offset_y: u8,
