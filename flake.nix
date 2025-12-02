@@ -85,9 +85,17 @@
           exec "${unstableRustTarget}/bin/rustfmt" "$@"
         '';
 
+        buildInputs = [ pkgs.openssl ];
+        nativeBuildInputs = [
+          pkgs.cmake
+          pkgs.pkg-config
+        ];
+
         cargoArtifacts = craneLib.buildDepsOnly {
           src = rustSrc;
           cargoExtraArgs = "--all-features --all";
+          inherit buildInputs;
+          inherit nativeBuildInputs;
         };
 
         clock = craneLib.buildPackage {
@@ -95,6 +103,8 @@
           src = rustSrc;
           version = tomlInfo.version;
           cargoExtraArgs = "--all-features --all";
+          inherit buildInputs;
+          inherit nativeBuildInputs;
         };
 
       in
@@ -107,6 +117,8 @@
             src = rustSrc;
             cargoExtraArgs = "--all --all-features";
             cargoClippyExtraArgs = "-- --deny warnings";
+            inherit buildInputs;
+            inherit nativeBuildInputs;
           };
 
           clock-fmt = unstableCraneLib.cargoFmt {
@@ -125,9 +137,11 @@
         };
 
         devShells.default = pkgs.mkShell {
-          nativeBuildInputs = [
+          inherit buildInputs;
+          nativeBuildInputs = nativeBuildInputs ++ [
             rustfmt'
             rustTarget
+            pkgs.cargo-insta
 
             pkgs.gitlint
           ];

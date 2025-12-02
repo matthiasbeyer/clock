@@ -5,6 +5,8 @@ use embedded_graphics::text::Text;
 use embedded_graphics::Drawable;
 use smart_leds_matrix::layout::Rectangular;
 use smart_leds_matrix::SmartLedMatrix;
+use url::Url;
+use wled_json_api_library::wled::Wled;
 
 mod cli;
 mod config;
@@ -55,6 +57,19 @@ async fn run(
         std::net::UdpSocket::bind(format!("0.0.0.0:{}", config.display.udp_port))
             .map_err(crate::error::Error::UDPBind)?,
     )?;
+    tracing::info!("Created DDP connection");
+
+    let url = Url::try_from(format!("http://{}/", config.display.host).as_ref())?;
+    let mut wled = Wled::try_from_url(&url).await?;
+    tracing::info!("Created WLED connection");
+
+    wled.state = Some(wled_json_api_library::structures::state::State {
+        on: Some(true),
+        ..Default::default()
+    });
+
+    let response = wled.flush_state().await?;
+    tracing::info!("Booted WLED clock successfully");
 
     let writer = writer::Writer::new(ddp_connection);
     let mut matrix = SmartLedMatrix::<_, _, { 32 * 16 }>::new(writer, Rectangular::new(32, 16));
@@ -99,14 +114,62 @@ async fn run(
             event = event_receiver.recv() => {
                 let Some(event) = event else { tracing::error!("Receiver closed"); break };
 
-                match event {
-                    event::Event::SetBrightness(brightness) => {
+                match event.event {
+                    event::EventInner::TurnOn => {
+                        wled.state = Some(wled_json_api_library::structures::state::State {
+                            on: Some(true),
+                            bri: Some(config.display.initial_brightness.clamp(0, 100)),
+                            tt: Some(10),
+                            ..Default::default()
+                        });
+
+                        let response = wled.flush_state().await?;
+                        tracing::info!(?response, "Updated WLED state");
+
+                        matrix.set_brightness(config.display.initial_brightness.clamp(0, 100));
+                        matrix
+                            .clear(embedded_graphics::pixelcolor::Rgb888::default())
+                            .unwrap();
+                        matrix.flush()?;
+                    },
+
+                    event::EventInner::TurnOff => {
+                        wled.state = Some(wled_json_api_library::structures::state::State {
+                            on: Some(false),
+                            ..Default::default()
+                        });
+
+                        let response = wled.flush_state().await?;
+                        tracing::info!(?response, "Updated WLED state");
+                    },
+
+                    event::EventInner::SetBrightness(brightness) => {
                         tracing::info!(?brightness, "Setting brightness");
                         matrix.set_brightness(brightness.clamp(5, 100));
                     },
 
-                    event::Event::ShowText { duration_secs, text } => {
+                    event::EventInner::ShowText { duration_secs, text, x, y } => {
                         tracing::info!(?duration_secs, ?text, "Showing text");
+
+                        let mut render_interval = tokio::time::interval(config.display.interval);
+                        let start_time = std::time::Instant::now();
+                        let duration_secs = std::time::Duration::from_secs(duration_secs.into());
+
+                        let offset = Point::new(
+                            x.into(),
+                            y.into(),
+                        );
+
+                        matrix
+                            .clear(embedded_graphics::pixelcolor::Rgb888::default())
+                            .unwrap();
+
+                        while start_time.elapsed() < duration_secs {
+                            Text::new(&text, offset, clock_rainbow_style.next().unwrap()).draw(&mut matrix).unwrap();
+                            matrix.flush()?;
+
+                            let _ = render_interval.tick().await;
+                        }
                     },
                 }
             }

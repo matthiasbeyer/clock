@@ -20,6 +20,12 @@ pub enum Error {
 
     #[error("MQTT error")]
     Mqtt(#[source] MqttError),
+
+    #[error("URL error")]
+    Url(#[from] url::ParseError),
+
+    #[error("WLED error")]
+    WledJsonApi(#[from] wled_json_api_library::errors::WledJsonApiError),
 }
 
 #[derive(Debug, thiserror::Error)]
