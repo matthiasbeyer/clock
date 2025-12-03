@@ -28,7 +28,8 @@ toml = "0.9.8"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 url = "2.5.7"
-wled-json-api-library = { git = "https://github.com/Xysto/wled-json-api-library", branch = "refacto/going_async" }
+reqwest = { version = "0.12", features = ["json", "gzip"] }
+wled-api-types = { git = "https://github.com/matthiasbeyer/wled-api-types" }
 
 [dev-dependencies]
 insta = { version = "1.44.3", features = ["json"] }

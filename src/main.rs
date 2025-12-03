@@ -6,7 +6,6 @@ use embedded_graphics::Drawable;
 use smart_leds_matrix::layout::Rectangular;
 use smart_leds_matrix::SmartLedMatrix;
 use url::Url;
-use wled_json_api_library::wled::Wled;
 
 mod cli;
 mod config;
@@ -59,16 +58,29 @@ async fn run(
     )?;
     tracing::info!("Created DDP connection");
 
-    let url = Url::try_from(format!("http://{}/", config.display.host).as_ref())?;
-    let mut wled = Wled::try_from_url(&url).await?;
+    let state_url = Url::try_from(format!("http://{}/json/state", config.display.host).as_ref())?;
+    let effects_url = Url::try_from(format!("http://{}/json/eff", config.display.host).as_ref())?;
+
+    let wled_client = reqwest::ClientBuilder::new()
+        .gzip(true)
+        .timeout(std::time::Duration::from_millis(5000u64))
+        .build()
+        .map_err(crate::error::Error::Reqwest)?;
+
     tracing::info!("Created WLED connection");
 
-    wled.state = Some(wled_json_api_library::structures::state::State {
-        on: Some(true),
-        ..Default::default()
-    });
+    wled_client
+        .post(state_url.clone())
+        .json(&wled_api_types::types::state::State {
+            on: Some(true),
+            ..Default::default()
+        })
+        .send()
+        .await
+        .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
+        .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
+        .map_err(crate::error::Error::Reqwest)?;
 
-    let response = wled.flush_state().await?;
     tracing::info!("Booted WLED clock successfully");
 
     let writer = writer::Writer::new(ddp_connection);
@@ -116,15 +128,20 @@ async fn run(
 
                 match event.event {
                     event::EventInner::TurnOn => {
-                        wled.state = Some(wled_json_api_library::structures::state::State {
-                            on: Some(true),
-                            bri: Some(config.display.initial_brightness.clamp(0, 100)),
-                            tt: Some(10),
-                            ..Default::default()
-                        });
-
-                        let response = wled.flush_state().await?;
-                        tracing::info!(?response, "Updated WLED state");
+                        wled_client
+                            .post(state_url.clone())
+                            .json(&wled_api_types::types::state::State {
+                                on: Some(true),
+                                bri: Some(config.display.initial_brightness.clamp(0, 100)),
+                                tt: Some(10),
+                                ..Default::default()
+                            })
+                            .send()
+                            .await
+                            .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
+                            .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
+        .map_err(crate::error::Error::Reqwest)?;
+                        tracing::info!("Updated WLED state");
 
                         matrix.set_brightness(config.display.initial_brightness.clamp(0, 100));
                         matrix
@@ -134,13 +151,18 @@ async fn run(
                     },
 
                     event::EventInner::TurnOff => {
-                        wled.state = Some(wled_json_api_library::structures::state::State {
-                            on: Some(false),
-                            ..Default::default()
-                        });
-
-                        let response = wled.flush_state().await?;
-                        tracing::info!(?response, "Updated WLED state");
+                        wled_client
+                            .post(state_url.clone())
+                            .json(&wled_api_types::types::state::State {
+                                on: Some(false),
+                                ..Default::default()
+                            })
+                            .send()
+                            .await
+                            .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
+                            .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
+        .map_err(crate::error::Error::Reqwest)?;
+                        tracing::info!("Updated WLED state");
                     },
 
                     event::EventInner::SetBrightness(brightness) => {
@@ -170,6 +192,44 @@ async fn run(
 
                             let _ = render_interval.tick().await;
                         }
+                    },
+
+                    event::EventInner::ShowPreset { name, duration_s, c1, c2, c3 } => {
+                        let effects = wled_client.get(effects_url.clone())
+                            .send()
+                            .await
+                            .map_err(crate::error::Error::Reqwest)?
+                            .json::<Vec<String>>()
+                            .await
+                            .inspect(|response| tracing::debug!(?response, "Successfully asked for effects"))
+                            .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
+                            .map_err(crate::error::Error::Reqwest)?;
+
+                        let Some(effect_idx) = effects.iter().enumerate().find_map(|(idx, n)| (*n == name).then_some(idx)) else {
+                            tracing::error!("{name} not found in {}", effects.join(", "));
+                            continue
+                        };
+
+                        let response = wled_client
+                            .post(state_url.clone())
+                            .json(&wled_api_types::types::state::State {
+                            seg: Some(vec![
+                                wled_api_types::types::state::Seg { fx: Some(effect_idx as u16), c1, c2, c3, ..Default::default() }]),
+                                ..Default::default()
+                            })
+                            .send()
+                            .await
+                            .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
+                            .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
+                            .map_err(crate::error::Error::Reqwest)?
+                            .json::<serde_json::Value>()
+                            .await
+                            .map_err(crate::error::Error::Reqwest)?;
+
+                        tracing::debug!(?response, "Received JSON response");
+                        tracing::info!("Posted effect {effect_idx} successfully");
+
+                        tokio::time::sleep(std::time::Duration::from_secs(duration_s)).await
                     },
                 }
             }

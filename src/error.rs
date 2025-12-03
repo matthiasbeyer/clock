@@ -24,8 +24,8 @@ pub enum Error {
     #[error("URL error")]
     Url(#[from] url::ParseError),
 
-    #[error("WLED error")]
-    WledJsonApi(#[from] wled_json_api_library::errors::WledJsonApiError),
+    #[error("Reqwest error")]
+    Reqwest(#[source] reqwest::Error),
 }
 
 #[derive(Debug, thiserror::Error)]

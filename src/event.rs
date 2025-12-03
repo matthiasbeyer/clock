@@ -18,6 +18,14 @@ pub enum EventInner {
         x: u8,
         y: u8,
     },
+
+    ShowPreset {
+        name: String,
+        duration_s: u64,
+        c1: Option<u8>,
+        c2: Option<u8>,
+        c3: Option<u8>,
+    }
 }
 
 #[cfg(test)]
