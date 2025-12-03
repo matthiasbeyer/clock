@@ -1,0 +1,18 @@
+[mqtt]
+host = "192.168.178.42"
+port = 1883
+qos = "AtMostOnce"
+client_name = "clock-server"
+topic_prefix = "clock"
+keep_alive = "10s"
+
+[display]
+host = "192.168.178.123"
+port = 4048
+udp_port = 6969
+initial_brightness = 20
+interval = "1333ms"
+time_font = "Font6x9"
+time_offset_x = 1
+time_offset_y = 10
+
