@@ -1,0 +1,10 @@
+{
+  "event": {
+    "ShowText": {
+      "duration_secs": 10,
+      "text": "Hello",
+      "x": 1,
+      "y": 8
+    }
+  }
+}

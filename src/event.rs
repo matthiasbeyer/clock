@@ -25,7 +25,7 @@ pub enum EventInner {
         c1: Option<u8>,
         c2: Option<u8>,
         c3: Option<u8>,
-    }
+    },
 }
 
 #[cfg(test)]
@@ -93,5 +93,35 @@ mod tests {
           }
         }
         "#);
+    }
+
+    #[test]
+    fn test_deser_testfile_effect() {
+        let s = include_str!("../test/effect.json");
+        let _: Event = serde_json::from_str(s).unwrap();
+    }
+
+    #[test]
+    fn test_deser_testfile_set_brightness_20() {
+        let s = include_str!("../test/set_brightness_20.json");
+        let _: Event = serde_json::from_str(s).unwrap();
+    }
+
+    #[test]
+    fn test_deser_testfile_show_hello() {
+        let s = include_str!("../test/show_hello.json");
+        let _: Event = serde_json::from_str(s).unwrap();
+    }
+
+    #[test]
+    fn test_deser_testfile_turn_off() {
+        let s = include_str!("../test/turn_off.json");
+        let _: Event = serde_json::from_str(s).unwrap();
+    }
+
+    #[test]
+    fn test_deser_testfile_turn_on() {
+        let s = include_str!("../test/turn_on.json");
+        let _: Event = serde_json::from_str(s).unwrap();
     }
 }
