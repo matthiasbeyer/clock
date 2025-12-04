@@ -1,9 +1,12 @@
 {
     "event": {
         "ShowPreset": {
-            "name": "Fireworks",
+            "name": "Fireworks 1D",
             "duration_s": 15,
-            "c1": 250
+            "c1": 250,
+            "c2": 250,
+            "ix": 200,
+            "sx": 200
         }
     }
 }

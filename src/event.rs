@@ -25,6 +25,8 @@ pub enum EventInner {
         c1: Option<u8>,
         c2: Option<u8>,
         c3: Option<u8>,
+        sx: Option<u8>,
+        ix: Option<u8>,
     },
 }
 

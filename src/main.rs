@@ -194,7 +194,7 @@ async fn run(
                         }
                     },
 
-                    event::EventInner::ShowPreset { name, duration_s, c1, c2, c3 } => {
+                    event::EventInner::ShowPreset { name, duration_s, c1, c2, c3, sx, ix } => {
                         let effects = wled_client.get(effects_url.clone())
                             .send()
                             .await
@@ -214,7 +214,15 @@ async fn run(
                             .post(state_url.clone())
                             .json(&wled_api_types::types::state::State {
                             seg: Some(vec![
-                                wled_api_types::types::state::Seg { fx: Some(effect_idx as u16), c1, c2, c3, ..Default::default() }]),
+                                wled_api_types::types::state::Seg {
+                                    fx: Some(effect_idx as u16),
+                                    c1,
+                                    c2,
+                                    c3: c3.map(|v| v.clamp(0, 31)),
+                                    sx,
+                                    ix,
+                                    ..Default::default()
+                                }]),
                                 ..Default::default()
                             })
                             .send()
