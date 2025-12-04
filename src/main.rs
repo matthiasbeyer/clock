@@ -96,7 +96,7 @@ async fn run(
     tokio::task::spawn({
         let mqtt_config = config.mqtt.clone();
         let cancellation_token = cancellation_token.clone();
-        mqtt::run(mqtt_config, cancellation_token, event_sender)
+        mqtt::run(mqtt_config, cancellation_token, event_sender.clone())
     });
 
     let mut render_interval = tokio::time::interval(config.display.interval);
@@ -131,7 +131,7 @@ async fn run(
 
                 match event.event {
                     event::EventInner::TurnOn => {
-                        wled_client
+                        if let Err(error) = wled_client
                             .post(state_url.clone())
                             .json(&wled_api_types::types::state::State {
                                 on: Some(true),
@@ -142,8 +142,19 @@ async fn run(
                             .send()
                             .await
                             .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
-                            .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
-                            .map_err(crate::error::Error::Reqwest)?;
+                        {
+                            tracing::error!(?error, "WLED Client errored");
+                            if !error.is_timeout() {
+                                return Err(crate::error::Error::Reqwest(error));
+                            }
+
+                            // Timeout, retry
+                            if let Err(error) = event_sender.send(event::Event { event: event::EventInner::TurnOn }).await {
+                                tracing::error!(?error, "Failed to send event to channel");
+                            }
+                            continue;
+                        }
+
                         tracing::info!("Updated WLED state");
 
                         matrix.set_brightness(config.display.initial_brightness.clamp(0, 100));
@@ -154,7 +165,7 @@ async fn run(
                     },
 
                     event::EventInner::TurnOff => {
-                        wled_client
+                        if let Err(error) = wled_client
                             .post(state_url.clone())
                             .json(&wled_api_types::types::state::State {
                                 on: Some(false),
@@ -163,8 +174,19 @@ async fn run(
                             .send()
                             .await
                             .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
-                            .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
-                            .map_err(crate::error::Error::Reqwest)?;
+                        {
+                            tracing::error!(?error, "WLED Client errored");
+                            if !error.is_timeout() {
+                                return Err(crate::error::Error::Reqwest(error));
+                            }
+
+                            // Timeout, retry
+                            if let Err(error) = event_sender.send(event::Event { event: event::EventInner::TurnOff }).await {
+                                tracing::error!(?error, "Failed to send event to channel");
+                            }
+                            continue;
+                        }
+
                         tracing::info!("Updated WLED state");
                     },
 
