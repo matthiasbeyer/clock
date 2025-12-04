@@ -58,9 +58,8 @@ where
         let time_display_format = time::format_description::parse("[hour]:[minute]").unwrap();
         async move {
             let font = self.time_font.into();
-            let mut clock_rainbow_style = crate::util::rainbow_color_iterator().map(|color| {
-                embedded_graphics::mono_font::MonoTextStyle::new(&font, color)
-            });
+            let mut clock_rainbow_style = crate::util::rainbow_color_iterator()
+                .map(|color| embedded_graphics::mono_font::MonoTextStyle::new(&font, color));
 
             let mut last_rendered_str = None;
 
@@ -92,9 +91,13 @@ where
                     }
 
                     // Draw text to the buffer
-                    Text::new(&time_str, self.time_offset, clock_rainbow_style.next().unwrap())
-                        .draw(&mut *matrix)
-                        .unwrap();
+                    Text::new(
+                        &time_str,
+                        self.time_offset,
+                        clock_rainbow_style.next().unwrap(),
+                    )
+                    .draw(&mut *matrix)
+                    .unwrap();
 
                     matrix.flush()?;
                     tracing::trace!(?time_str, "Rendered clock");
