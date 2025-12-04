@@ -89,6 +89,9 @@ mod tests {
                 text: String::from("Hello"),
                 x: 1,
                 y: 1,
+                r: 100,
+                g: 100,
+                b: 100,
             },
         };
         insta::assert_json_snapshot!(e, @r#"
@@ -97,6 +100,9 @@ mod tests {
             "ShowText": {
               "duration_secs": 10,
               "text": "Hello",
+              "r": 100,
+              "g": 100,
+              "b": 100,
               "x": 1,
               "y": 1
             }
