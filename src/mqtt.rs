@@ -34,9 +34,12 @@ pub async fn run(
         tracing::info!("Cancelled, shutting down MQTT processing");
         return Ok(());
     };
-    tracing::info!("Successfully subscribed to {topic}");
 
-    sub_result.map_err(crate::error::MqttError::Subscribing)?;
+    sub_result
+        .inspect_err(|error| tracing::error!(?error, "Failed to subscribe to topic"))
+        .map_err(crate::error::MqttError::Subscribing)?;
+
+    tracing::info!("Successfully subscribed to {topic}");
 
     loop {
         let event = cancellation_token
