@@ -109,6 +109,9 @@ async fn run(
     let mut clock_rainbow_style =
         util::rainbow_color_iterator().map(|color| MonoTextStyle::new(&time_font, color));
 
+    // Track the brightness that was set via the MQTT API, so we can re-use it when turning on
+    let mut set_brightness = None;
+
     loop {
         tokio::select! {
             _ = render_interval.tick() => {
@@ -132,7 +135,7 @@ async fn run(
                             .post(state_url.clone())
                             .json(&wled_api_types::types::state::State {
                                 on: Some(true),
-                                bri: Some(config.display.initial_brightness.clamp(0, 100)),
+                                bri: Some(set_brightness.unwrap_or(config.display.initial_brightness).clamp(0, 100)),
                                 tt: Some(10),
                                 ..Default::default()
                             })
@@ -166,6 +169,7 @@ async fn run(
                     },
 
                     event::EventInner::SetBrightness(brightness) => {
+                        set_brightness = Some(brightness);
                         tracing::info!(?brightness, "Setting brightness");
                         matrix.set_brightness(brightness.clamp(5, 100));
                     },
