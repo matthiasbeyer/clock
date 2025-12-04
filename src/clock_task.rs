@@ -62,6 +62,8 @@ where
                 embedded_graphics::mono_font::MonoTextStyle::new(&font, color)
             });
 
+            let mut last_rendered_str = None;
+
             loop {
                 let Some(_tick) = self
                     .cancellation_token
@@ -82,10 +84,12 @@ where
                         .format(&time_display_format)
                         .map_err(crate::error::Error::TimeFormatting)?;
 
-                    matrix
-                        .clear(embedded_graphics::pixelcolor::Rgb888::default())
-                        .unwrap();
-                    matrix.flush()?;
+                    if last_rendered_str.is_some_and(|s| s != time_str) {
+                        matrix
+                            .clear(embedded_graphics::pixelcolor::Rgb888::default())
+                            .unwrap();
+                        matrix.flush()?;
+                    }
 
                     // Draw text to the buffer
                     Text::new(&time_str, self.time_offset, clock_rainbow_style.next().unwrap())
@@ -93,6 +97,9 @@ where
                         .unwrap();
 
                     matrix.flush()?;
+                    tracing::trace!(?time_str, "Rendered clock");
+
+                    last_rendered_str = Some(time_str);
                 }
             }
             Ok(())
