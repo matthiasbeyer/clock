@@ -15,6 +15,9 @@ pub enum EventInner {
     ShowText {
         duration_secs: u32,
         text: String,
+        r: u8,
+        g: u8,
+        b: u8,
         x: u8,
         y: u8,
     },

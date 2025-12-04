@@ -1,15 +1,17 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use embedded_graphics::geometry::Point;
-use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::prelude::DrawTarget;
 use embedded_graphics::text::Text;
 use embedded_graphics::Drawable;
 use smart_leds_matrix::layout::Rectangular;
 use smart_leds_matrix::SmartLedMatrix;
+use tokio::sync::Mutex;
 use url::Url;
 
 mod cli;
+mod clock_task;
 mod config;
 mod error;
 mod event;
@@ -95,21 +97,27 @@ async fn run(
 
     let (event_sender, mut event_receiver) = tokio::sync::mpsc::channel::<event::Event>(100);
     let cancellation_token = tokio_util::sync::CancellationToken::new();
+    let matrix = Arc::new(Mutex::new(matrix));
+    let clock_displaying_is_running = Arc::new(std::sync::atomic::AtomicBool::from(true));
+
     tokio::task::spawn({
         let mqtt_config = config.mqtt.clone();
         let cancellation_token = cancellation_token.clone();
-        mqtt::run(mqtt_config, cancellation_token, event_sender.clone())
+        mqtt::run(
+            mqtt_config,
+            cancellation_token.clone(),
+            event_sender.clone(),
+        )
     });
-
-    let mut render_interval = tokio::time::interval(config.display.interval);
-    let time_display_format = time::format_description::parse("[hour]:[minute]").unwrap();
-    let time_font = config.display.time_font.into();
-    let time_offset = Point::new(
-        config.display.time_offset_x.into(),
-        config.display.time_offset_y.into(),
-    );
-    let mut clock_rainbow_style =
-        util::rainbow_color_iterator().map(|color| MonoTextStyle::new(&time_font, color));
+    tokio::task::spawn({
+        clock_task::ClockTask::new(
+            clock_displaying_is_running.clone(),
+            cancellation_token.clone(),
+            matrix.clone(),
+            &config,
+        )
+        .run()
+    });
 
     // Track the brightness that was set via the MQTT API, so we can re-use it when turning on
     let mut set_brightness = None;
@@ -117,16 +125,10 @@ async fn run(
 
     loop {
         tokio::select! {
-            _ = render_interval.tick() => {
-                let time = time::OffsetDateTime::now_local().map_err(error::Error::TimeOffset)?;
-                let time_str = time.format(&time_display_format).map_err(error::Error::TimeFormatting)?;
-
-                matrix.clear(embedded_graphics::pixelcolor::Rgb888::default()).unwrap();
-                matrix.flush()?;
-
-                // Draw text to the buffer
-                Text::new(&time_str, time_offset, clock_rainbow_style.next().unwrap()).draw(&mut matrix).unwrap();
-                matrix.flush()?;
+            _ctrl_c = tokio::signal::ctrl_c() => {
+                tracing::info!("Ctrl-C received, shutting down");
+                cancellation_token.cancel();
+                break
             }
 
             event = event_receiver.recv() => {
@@ -140,6 +142,9 @@ async fn run(
                                 continue
                             }
                         }
+
+                        // Turn on the clock display task
+                        clock_displaying_is_running.store(true, std::sync::atomic::Ordering::Relaxed);
 
                         if let Err(error) = wled_client
                             .post(state_url.clone())
@@ -167,11 +172,14 @@ async fn run(
 
                         tracing::info!("Updated WLED state");
 
-                        matrix.set_brightness(config.display.initial_brightness.clamp(0, 100));
-                        matrix
-                            .clear(embedded_graphics::pixelcolor::Rgb888::default())
-                            .unwrap();
-                        matrix.flush()?;
+                        {
+                            let mut matrix = matrix.lock().await;
+                            matrix.set_brightness(config.display.initial_brightness.clamp(0, 100));
+                            matrix
+                                .clear(embedded_graphics::pixelcolor::Rgb888::default())
+                                .unwrap();
+                            matrix.flush()?;
+                        }
                         last_turn_on = Some(Instant::now());
                     },
 
@@ -199,15 +207,19 @@ async fn run(
                         }
 
                         tracing::info!("Updated WLED state");
+
+                        // Turn off the clock display task
+                        clock_displaying_is_running.store(false, std::sync::atomic::Ordering::Relaxed);
                     },
 
                     event::EventInner::SetBrightness(brightness) => {
                         set_brightness = Some(brightness);
                         tracing::info!(?brightness, "Setting brightness");
+                        let mut matrix = matrix.lock().await;
                         matrix.set_brightness(brightness.clamp(5, 100));
                     },
 
-                    event::EventInner::ShowText { duration_secs, text, x, y } => {
+                    event::EventInner::ShowText { duration_secs, text, r,g,b, x, y } => {
                         tracing::info!(?duration_secs, ?text, "Showing text");
 
                         let mut render_interval = tokio::time::interval(config.display.interval);
@@ -219,16 +231,29 @@ async fn run(
                             y.into(),
                         );
 
+                        // Turn off the clock display task
+                        clock_displaying_is_running.store(false, std::sync::atomic::Ordering::Relaxed);
+
+                        let mut matrix = matrix.lock().await;
                         matrix
                             .clear(embedded_graphics::pixelcolor::Rgb888::default())
                             .unwrap();
 
+                        let font = config.display.time_font.into();
+                        let text_style = embedded_graphics::mono_font::MonoTextStyle::new(&font,
+                            embedded_graphics::pixelcolor::Rgb888::new(r,g,b)
+                        );
+
                         while start_time.elapsed() < duration_secs {
-                            Text::new(&text, offset, clock_rainbow_style.next().unwrap()).draw(&mut matrix).unwrap();
+                            Text::new(&text, offset, text_style).draw(&mut *matrix).unwrap();
                             matrix.flush()?;
 
                             let _ = render_interval.tick().await;
                         }
+
+                        // Turn on the clock display task
+                        clock_displaying_is_running.store(true, std::sync::atomic::Ordering::Relaxed);
+                        drop(matrix)
                     },
 
                     event::EventInner::ShowPreset { name, duration_s, c1, c2, c3, sx, ix } => {
@@ -246,6 +271,9 @@ async fn run(
                             tracing::error!("{name} not found in {}", effects.join(", "));
                             continue
                         };
+
+                        // Turn off the clock display task
+                        clock_displaying_is_running.store(false, std::sync::atomic::Ordering::Relaxed);
 
                         let response = wled_client
                             .post(state_url.clone())
@@ -274,12 +302,16 @@ async fn run(
                         tracing::debug!(?response, "Received JSON response");
                         tracing::info!("Posted effect {effect_idx} successfully");
 
-                        tokio::time::sleep(std::time::Duration::from_secs(duration_s)).await
+                        tokio::time::sleep(std::time::Duration::from_secs(duration_s)).await;
+                        // Turn on the clock display task
+                        clock_displaying_is_running.store(true, std::sync::atomic::Ordering::Relaxed);
                     },
 
                     event::EventInner::Json { value, sleep_s } => {
                         tracing::info!(json = ?value, ?sleep_s, "Sending plain JSON to WLED API");
 
+                        // Turn off the clock display task
+                        clock_displaying_is_running.store(false , std::sync::atomic::Ordering::Relaxed);
                         let response = wled_client
                             .post(state_url.clone())
                             .json(&value)
@@ -293,15 +325,11 @@ async fn run(
                             .map_err(crate::error::Error::Reqwest)?;
 
                         tracing::info!(?response, "Received response from WLED API");
-                        tokio::time::sleep(std::time::Duration::from_secs(sleep_s)).await
+                        tokio::time::sleep(std::time::Duration::from_secs(sleep_s)).await;
+                        // Turn on the clock display task
+                        clock_displaying_is_running.store(true, std::sync::atomic::Ordering::Relaxed);
                     },
                 }
-            }
-
-            _ctrl_c = tokio::signal::ctrl_c() => {
-                tracing::info!("Ctrl-C received, shutting down");
-                cancellation_token.cancel();
-                break
             }
         }
     }
