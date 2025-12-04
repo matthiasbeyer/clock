@@ -41,6 +41,9 @@ pub struct MqttConfig {
     pub qos: Qos,
     pub client_name: String,
 
+    pub username: Option<String>,
+    pub password: Option<String>,
+
     #[serde(with = "humantime_serde")]
     pub keep_alive: std::time::Duration,
 

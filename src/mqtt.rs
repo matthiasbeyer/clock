@@ -12,6 +12,16 @@ pub async fn run(
         MqttOptions::new(&config.client_name, config.host.to_string(), config.port);
     mqttoptions.set_keep_alive(config.keep_alive);
 
+    if let (Some(username), Some(password)) = (config.username.as_ref(), config.password.as_ref()) {
+        tracing::debug!(
+            ?username,
+            "Setting username and password for MQTT connection"
+        );
+        mqttoptions.set_credentials(username, password);
+    } else {
+        tracing::debug!("Using no username/password for MQTT connection");
+    }
+
     let (client, mut eventloop) = rumqttc::v5::AsyncClient::new(mqttoptions, 100);
 
     let topic = format!("{prefix}/events", prefix = config.topic_prefix);
