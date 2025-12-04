@@ -21,7 +21,7 @@ pub struct DisplayConfig {
     pub debounce_turn_on: std::time::Duration,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, serde::Deserialize)]
 pub enum Font {
     Font5x8,
     Font6x9,
