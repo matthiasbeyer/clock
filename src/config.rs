@@ -37,6 +37,7 @@ impl Bootstate {
 }
 
 #[derive(Debug, Copy, Clone, serde::Deserialize)]
+#[allow(clippy::enum_variant_names)]
 pub enum Font {
     Font5x8,
     Font6x9,
