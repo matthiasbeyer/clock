@@ -32,7 +32,7 @@ pub enum EventInner {
     Json {
         value: serde_json::Value,
         sleep_s: u64,
-    }
+    },
 }
 
 #[cfg(test)]

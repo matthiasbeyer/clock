@@ -140,7 +140,7 @@ async fn run(
                             .await
                             .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
                             .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
-        .map_err(crate::error::Error::Reqwest)?;
+                            .map_err(crate::error::Error::Reqwest)?;
                         tracing::info!("Updated WLED state");
 
                         matrix.set_brightness(config.display.initial_brightness.clamp(0, 100));
@@ -161,7 +161,7 @@ async fn run(
                             .await
                             .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
                             .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
-        .map_err(crate::error::Error::Reqwest)?;
+                            .map_err(crate::error::Error::Reqwest)?;
                         tracing::info!("Updated WLED state");
                     },
 
