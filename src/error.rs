@@ -18,9 +18,6 @@ pub enum Error {
     #[error("Failed to bind UDP socket")]
     UDPBind(#[source] std::io::Error),
 
-    #[error("MQTT error")]
-    Mqtt(#[source] MqttError),
-
     #[error("URL error")]
     Url(#[from] url::ParseError),
 
