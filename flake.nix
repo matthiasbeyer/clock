@@ -76,7 +76,7 @@
               ++ (builtins.map includeFilesWithExt [
                 "rs"
                 "toml"
-                "sql"
+                "json"
               ])
             );
         };
