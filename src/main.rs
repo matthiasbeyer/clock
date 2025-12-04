@@ -239,6 +239,25 @@ async fn run(
 
                         tokio::time::sleep(std::time::Duration::from_secs(duration_s)).await
                     },
+
+                    event::EventInner::Json { value, sleep_s } => {
+                        tracing::info!(json = ?value, ?sleep_s, "Sending plain JSON to WLED API");
+
+                        let response = wled_client
+                            .post(state_url.clone())
+                            .json(&value)
+                            .send()
+                            .await
+                            .inspect(|response| tracing::debug!(?response, "Successfully flushed state to WLED"))
+                            .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
+                            .map_err(crate::error::Error::Reqwest)?
+                            .json::<serde_json::Value>()
+                            .await
+                            .map_err(crate::error::Error::Reqwest)?;
+
+                        tracing::info!(?response, "Received response from WLED API");
+                        tokio::time::sleep(std::time::Duration::from_secs(sleep_s)).await
+                    },
                 }
             }
 
