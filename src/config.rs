@@ -15,6 +15,10 @@ pub struct DisplayConfig {
     pub time_font: Font,
     pub time_offset_x: u8,
     pub time_offset_y: u8,
+
+    /// How long to debounce "TurnOn" events
+    #[serde(with = "humantime_serde")]
+    pub debounce_turn_on: std::time::Duration,
 }
 
 #[derive(Debug, serde::Deserialize)]

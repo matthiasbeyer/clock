@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use embedded_graphics::geometry::Point;
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::prelude::DrawTarget;
@@ -111,6 +113,7 @@ async fn run(
 
     // Track the brightness that was set via the MQTT API, so we can re-use it when turning on
     let mut set_brightness = None;
+    let mut last_turn_on: Option<Instant> = None;
 
     loop {
         tokio::select! {
@@ -131,6 +134,13 @@ async fn run(
 
                 match event.event {
                     event::EventInner::TurnOn => {
+                        if let Some(last_turn_on) = last_turn_on {
+                            if last_turn_on.elapsed() < config.display.debounce_turn_on {
+                                tracing::info!("Ignoring TurnOn event, still in debounce time");
+                                continue
+                            }
+                        }
+
                         if let Err(error) = wled_client
                             .post(state_url.clone())
                             .json(&wled_api_types::types::state::State {
@@ -162,6 +172,7 @@ async fn run(
                             .clear(embedded_graphics::pixelcolor::Rgb888::default())
                             .unwrap();
                         matrix.flush()?;
+                        last_turn_on = Some(Instant::now());
                     },
 
                     event::EventInner::TurnOff => {
