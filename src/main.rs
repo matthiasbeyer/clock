@@ -76,7 +76,7 @@ async fn run(
     wled_client
         .post(state_url.clone())
         .json(&wled_api_types::types::state::State {
-            on: Some(true),
+            on: Some(config.display.bootstate.into_bool()),
             ..Default::default()
         })
         .send()
@@ -85,7 +85,10 @@ async fn run(
         .inspect_err(|error| tracing::error!(?error, "WLED Client errored"))
         .map_err(crate::error::Error::Reqwest)?;
 
-    tracing::info!("Booted WLED clock successfully");
+    tracing::info!(
+        bootstate = config.display.bootstate.into_bool(),
+        "Booted WLED clock successfully"
+    );
 
     let writer = writer::Writer::new(ddp_connection);
     let mut matrix = SmartLedMatrix::<_, _, { 32 * 16 }>::new(writer, Rectangular::new(32, 16));

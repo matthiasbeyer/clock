@@ -19,6 +19,21 @@ pub struct DisplayConfig {
     /// How long to debounce "TurnOn" events
     #[serde(with = "humantime_serde")]
     pub debounce_turn_on: std::time::Duration,
+
+    pub bootstate: Bootstate,
+}
+
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Bootstate {
+    On,
+    Off,
+}
+
+impl Bootstate {
+    pub fn into_bool(self) -> bool {
+        std::matches!(self, Bootstate::On)
+    }
 }
 
 #[derive(Debug, Copy, Clone, serde::Deserialize)]
